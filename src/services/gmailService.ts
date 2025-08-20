@@ -207,7 +207,7 @@ class GmailService {
             <p>TodoPro is a collaborative task management platform that helps teams work together efficiently.</p>
             
             <div style="text-align: center;">
-              <a href="http://localhost:3000/invite/accept/${invitationId}" class="button">Accept Invitation</a>
+              <a href="https://todos-application-892h.vercel.app/invite/accept/${invitationId}" class="button">Accept Invitation</a>
             </div>
             
             <p style="margin-top: 30px; font-size: 14px; color: #666;">
@@ -234,7 +234,7 @@ class GmailService {
       
       TodoPro is a collaborative task management platform that helps teams work together efficiently.
       
-      To accept this invitation, please visit: http://localhost:3000/invite/accept/${invitationId}
+      To accept this invitation, please visit: https://todos-application-892h.vercel.app/invite/accept/${invitationId}
       
       If you have any questions, please contact your team administrator.
       

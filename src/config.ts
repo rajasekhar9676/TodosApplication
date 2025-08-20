@@ -6,9 +6,11 @@ import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { setLogLevel } from "firebase/firestore";
 
-
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
+// IMPORTANT: If you get "auth/unauthorized-domain" error after deploying to Vercel:
+// 1. Go to Firebase Console: https://console.firebase.google.com/project/steam-outlet-425507-t1/authentication/settings
+// 2. Click "Authorized domains" tab
+// 3. Add your Vercel domain (e.g., your-app.vercel.app)
+// 4. Click "Add"
 
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
@@ -23,17 +25,11 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-// const app = initializeApp(firebaseConfig);
-// const auth=getAuth(app)
-
-// const provider=new GoogleAuthProvider();
-// export {auth,provider};
-
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 const db = getFirestore(app);
-const storage = getStorage(app); // Storage initialize chesam ra
+const storage = getStorage(app);
 setLogLevel('debug');
 
 export { auth, provider, db, storage };

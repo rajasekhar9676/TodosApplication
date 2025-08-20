@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { db } from '../config';
 import { collection, query, orderBy, getDocs, doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
@@ -23,12 +23,7 @@ const Calendar: React.FC = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
-  useEffect(() => {
-    if (!user) return;
-    fetchTasks();
-  }, [user]);
-
-  const fetchTasks = async () => {
+  const fetchTasks = useCallback(async () => {
     try {
       const userRef = doc(db, 'users', user!.uid);
       const userSnap = await getDoc(userRef);
@@ -68,7 +63,12 @@ const Calendar: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    fetchTasks();
+  }, [user, fetchTasks]);
 
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear();
@@ -353,4 +353,4 @@ const Calendar: React.FC = () => {
   );
 };
 
-export default Calendar; 
+export default Calendar;

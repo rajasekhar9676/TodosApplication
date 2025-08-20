@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { db } from '../config';
-import { collection, query, orderBy, getDocs, doc, getDoc, addDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, getDoc, addDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import { invitationService } from '../services/invitationService';
 
@@ -26,12 +26,7 @@ const Teams: React.FC = () => {
   });
   const [creating, setCreating] = useState(false);
 
-  useEffect(() => {
-    if (!user) return;
-    fetchTeams();
-  }, [user]);
-
-  const fetchTeams = async () => {
+  const fetchTeams = useCallback(async () => {
     try {
       const userRef = doc(db, 'users', user!.uid);
       const userSnap = await getDoc(userRef);
@@ -55,7 +50,12 @@ const Teams: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    fetchTeams();
+  }, [user, fetchTeams]);
 
   const handleCreateTeam = async (e: React.FormEvent) => {
     e.preventDefault();

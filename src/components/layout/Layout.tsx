@@ -19,6 +19,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const location = useLocation();
   const navigate = useNavigate();
 
+  // Note: handleTextRecorded is kept for future use with voice recording features
   const handleTextRecorded = async (text: string) => {
     try {
       const user = auth.currentUser;

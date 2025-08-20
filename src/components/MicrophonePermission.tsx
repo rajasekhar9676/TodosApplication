@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 
 interface MicrophonePermissionProps {
   onPermissionGranted: () => void;
@@ -12,11 +12,7 @@ const MicrophonePermission: React.FC<MicrophonePermissionProps> = ({
   const [permissionState, setPermissionState] = useState<'checking' | 'denied' | 'granted' | 'error'>('checking');
   const [errorMessage, setErrorMessage] = useState('');
 
-  useEffect(() => {
-    checkMicrophonePermission();
-  }, []);
-
-  const checkMicrophonePermission = async () => {
+  const checkMicrophonePermission = useCallback(async () => {
     try {
       // Check if getUserMedia is supported
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -61,7 +57,11 @@ const MicrophonePermission: React.FC<MicrophonePermissionProps> = ({
       
       onPermissionDenied();
     }
-  };
+  }, [onPermissionGranted, onPermissionDenied]);
+
+  useEffect(() => {
+    checkMicrophonePermission();
+  }, [checkMicrophonePermission]);
 
   const requestPermissionAgain = () => {
     setPermissionState('checking');

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { db } from '../config';
 import { doc, getDoc, collection, addDoc, updateDoc, serverTimestamp, query, orderBy, getDocs } from 'firebase/firestore';
@@ -48,13 +48,7 @@ const TeamDetail: React.FC = () => {
     role: 'member' as 'admin' | 'member'
   });
 
-  useEffect(() => {
-    if (teamId) {
-      fetchTeamData();
-    }
-  }, [teamId]);
-
-  const fetchTeamData = async () => {
+  const fetchTeamData = useCallback(async () => {
     try {
       const teamRef = doc(db, 'teams', teamId!);
       const teamSnap = await getDoc(teamRef);
@@ -77,7 +71,13 @@ const TeamDetail: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [teamId]);
+
+  useEffect(() => {
+    if (teamId) {
+      fetchTeamData();
+    }
+  }, [teamId, fetchTeamData]);
 
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();

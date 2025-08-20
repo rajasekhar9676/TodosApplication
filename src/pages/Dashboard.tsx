@@ -128,6 +128,7 @@ const Dashboard: React.FC = () => {
     fetchDashboardData();
   }, [user]);
 
+  // Note: handleTextRecorded is kept for future use with voice recording features
   const handleTextRecorded = async (text: string) => {
     if (!user) return;
     

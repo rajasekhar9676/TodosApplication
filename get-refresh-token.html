@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Gmail API Refresh Token Generator</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+        .step { background: #f5f5f5; padding: 15px; margin: 15px 0; border-radius: 5px; }
+        .code { background: #e8e8e8; padding: 10px; border-radius: 3px; font-family: monospace; }
+        .success { background: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+        .info { background: #d1ecf1; border: 1px solid #bee5eb; color: #0c5460; }
+        button { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }
+        input[type="text"] { width: 100%; padding: 8px; margin: 5px 0; }
+    </style>
+</head>
+<body>
+    <h1>🔑 Gmail API Refresh Token Generator</h1>
+    
+    <div class="info step">
+        <h3>📋 Your Current Credentials</h3>
+        <p><strong>Client ID:</strong> 82418082461-pfjprkn3mu5c44mq0lioo0qti3s4v4eu.apps.googleusercontent.com</p>
+        <p><strong>Client Secret:</strong> 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</p>
+        <p><strong>Email:</strong> rajasekharm2268@gmail.com</p>
+        <p><strong>Issue:</strong> ❌ Incomplete Refresh Token</p>
+    </div>
+
+    <div class="step">
+        <h3>🚀 Quick Fix - Get Complete Refresh Token</h3>
+        <ol>
+            <li><strong>Open OAuth Playground:</strong> 
+                <a href="https://developers.google.com/oauthplayground/" target="_blank">
+                    https://developers.google.com/oauthplayground/
+                </a>
+            </li>
+            
+            <li><strong>Configure OAuth:</strong>
+                <ul>
+                    <li>Click the ⚙️ settings icon (top right)</li>
+                    <li>Check "Use your own OAuth credentials"</li>
+                    <li>Enter your Client ID: <span class="code">82418082461-pfjprkn3mu5c44mq0lioo0qti3s4v4eu.apps.googleusercontent.com</span></li>
+                    <li>Enter your Client Secret: <span class="code">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</span></li>
+                    <li>Close settings</li>
+                </ul>
+            </li>
+            
+            <li><strong>Authorize Gmail API:</strong>
+                <ul>
+                    <li>In left panel, find "Gmail API v1"</li>
+                    <li>Select: <span class="code">https://mail.google.com/</span></li>
+                    <li>Click "Authorize APIs"</li>
+                    <li>Sign in with: <span class="code">rajasekharm2268@gmail.com</span></li>
+                    <li>Grant permissions</li>
+                </ul>
+            </li>
+            
+            <li><strong>Get Refresh Token:</strong>
+                <ul>
+                    <li>Click "Exchange authorization code for tokens"</li>
+                    <li>Copy the <strong>complete</strong> refresh token (starts with 1//)</li>
+                </ul>
+            </li>
+        </ol>
+    </div>
+
+    <div class="step">
+        <h3>✏️ Update Your .env File</h3>
+        <p>Replace the incomplete refresh token in your .env file with the complete one:</p>
+        <div class="code">
+            REACT_APP_GMAIL_REFRESH_TOKEN=1//[your_complete_refresh_token_here]
+        </div>
+    </div>
+
+    <div class="success step">
+        <h3>🧪 Test Email Sending</h3>
+        <ol>
+            <li>Save your updated .env file</li>
+            <li>Restart your React app (npm start)</li>
+            <li>Create a team and invite a member</li>
+            <li>Check if real emails are sent!</li>
+        </ol>
+    </div>
+
+    <div class="step">
+        <h3>🔧 Alternative: Use Working Script</h3>
+        <p>If OAuth Playground doesn't work, run this PowerShell command:</p>
+        <div class="code">
+            # In TodosApplication directory:<br>
+            .\get-refresh-token.ps1
+        </div>
+    </div>
+
+    <p><strong>Note:</strong> Refresh tokens are typically 100+ characters long. Your current token appears to be cut off at around 70 characters.</p>
+    
+    <button onclick="window.open('https://developers.google.com/oauthplayground/', '_blank')">
+        🚀 Open OAuth Playground
+    </button>
+</body>
+</html>
+

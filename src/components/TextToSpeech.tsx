@@ -14,7 +14,8 @@ const TextToSpeech: React.FC<TextToSpeechProps> = ({ text: initialText = '', onC
   const [showModal, setShowModal] = useState(onClose ? true : false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const BACKEND_URL = 'http://localhost:5000';
+  // Backend URL - Automatically detects environment
+  const BACKEND_URL = window.location.hostname === 'localhost' ? 'http://localhost:5000' : '';
 
   const handleTextToSpeech = async () => {
     if (!text.trim()) {

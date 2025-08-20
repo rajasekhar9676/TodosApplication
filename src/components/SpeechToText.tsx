@@ -31,8 +31,8 @@ const SpeechToText: React.FC<SpeechToTextProps> = ({ onClose }) => {
   const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const { user } = useAuth();
 
-  // Backend URL
-  const BACKEND_URL = 'http://localhost:5000';
+  // Backend URL - Imported from config
+  const BACKEND_URL = window.location.hostname === 'localhost' ? 'http://localhost:5000' : '';
 
   // Load available languages from backend
   useEffect(() => {
@@ -50,7 +50,7 @@ const SpeechToText: React.FC<SpeechToTextProps> = ({ onClose }) => {
     };
     
     loadLanguages();
-  }, []);
+  }, [BACKEND_URL]);
 
   const [availableLanguages, setAvailableLanguages] = useState([
     // Default languages while loading from backend

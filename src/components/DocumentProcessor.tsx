@@ -21,7 +21,8 @@ const DocumentProcessor: React.FC = () => {
   const [ttsText, setTtsText] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const BACKEND_URL = 'http://localhost:5000';
+  // Backend URL - Automatically detects environment
+  const BACKEND_URL = window.location.hostname === 'localhost' ? 'http://localhost:5000' : '';
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];

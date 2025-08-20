@@ -12,6 +12,20 @@ import { setLogLevel } from "firebase/firestore";
 // 3. Add your Vercel domain (e.g., your-app.vercel.app)
 // 4. Click "Add"
 
+// Dynamic Backend URL Configuration
+// Automatically detects development vs production environment
+const getBackendUrl = () => {
+  // Check if we're in production (Vercel)
+  if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    // Production: Use relative URL (same domain as frontend)
+    return '';
+  }
+  // Development: Use localhost
+  return 'http://localhost:5000';
+};
+
+export const BACKEND_URL = getBackendUrl();
+
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {

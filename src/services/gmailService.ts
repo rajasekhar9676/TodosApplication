@@ -34,6 +34,19 @@ class GmailService {
     console.log('Sender Email:', this.credentials.senderEmail);
   }
 
+  // Get the base URL for invitation links
+  private getBaseUrl(): string {
+    // Check if we're in production (Vercel) or development
+    if (typeof window !== 'undefined') {
+      // Frontend: use current origin
+      return window.location.origin;
+    } else {
+      // Backend/Service: use environment variable or default to production
+      // This will be used when the service is called from the frontend
+      return 'https://todos-application-892h.vercel.app';
+    }
+  }
+
   private async getAccessToken(): Promise<string> {
     try {
       console.log('🔐 Getting Gmail access token...');
@@ -207,7 +220,7 @@ class GmailService {
             <p>TodoPro is a collaborative task management platform that helps teams work together efficiently.</p>
             
             <div style="text-align: center;">
-              <a href="https://todos-application-892h.vercel.app/invite/accept/${invitationId}" class="button">Accept Invitation</a>
+              <a href="${this.getBaseUrl()}/invite/accept/${invitationId}" class="button">Accept Invitation</a>
             </div>
             
             <p style="margin-top: 30px; font-size: 14px; color: #666;">
@@ -234,7 +247,7 @@ class GmailService {
       
       TodoPro is a collaborative task management platform that helps teams work together efficiently.
       
-      To accept this invitation, please visit: https://todos-application-892h.vercel.app/invite/accept/${invitationId}
+      To accept this invitation, please visit: ${this.getBaseUrl()}/invite/accept/${invitationId}
       
       If you have any questions, please contact your team administrator.
       

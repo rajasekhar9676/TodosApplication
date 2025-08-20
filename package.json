@@ -62,5 +62,10 @@
     "grunt": "^1.6.1",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.14"
-  }
+  },
+  "engines": {
+  "node": "18.x"
+}
+
+  
 }

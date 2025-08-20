@@ -129,6 +129,7 @@ const Dashboard: React.FC = () => {
   }, [user]);
 
   // Note: handleTextRecorded is kept for future use with voice recording features
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleTextRecorded = async (text: string) => {
     if (!user) return;
     

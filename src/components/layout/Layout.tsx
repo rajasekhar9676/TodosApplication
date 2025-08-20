@@ -20,6 +20,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const navigate = useNavigate();
 
   // Note: handleTextRecorded is kept for future use with voice recording features
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleTextRecorded = async (text: string) => {
     try {
       const user = auth.currentUser;

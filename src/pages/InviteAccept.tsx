@@ -23,16 +23,29 @@ const InviteAccept: React.FC = () => {
   const fetchInvitation = useCallback(async () => {
     try {
       console.log('📧 InviteAccept: Starting to fetch invitation with ID:', invitationId);
+      console.log('📧 InviteAccept: Current user:', user);
+      console.log('📧 InviteAccept: User email:', user?.email);
+      console.log('📧 InviteAccept: User UID:', user?.uid);
       
       if (!invitationId) {
+        console.error('❌ InviteAccept: No invitation ID provided');
         setError('No invitation ID provided');
+        return;
+      }
+
+      if (!user) {
+        console.error('❌ InviteAccept: User not authenticated');
+        setError('Please log in to accept this invitation');
         return;
       }
 
       // Fetch real invitation from Firestore
       const invitationRef = doc(db, 'invitations', invitationId);
       console.log('📧 InviteAccept: Fetching from path:', `invitations/${invitationId}`);
+      console.log('📧 InviteAccept: About to call getDoc with ref:', invitationRef);
+      
       const invitationSnap = await getDoc(invitationRef);
+      console.log('📧 InviteAccept: getDoc completed, exists:', invitationSnap.exists());
       
       if (!invitationSnap.exists()) {
         console.error('❌ InviteAccept: Invitation document not found for ID:', invitationId);
@@ -95,12 +108,24 @@ const InviteAccept: React.FC = () => {
         email: invitationData.email
       });
     } catch (error) {
-      console.error('Error fetching invitation:', error);
-      setError('Failed to load invitation');
+      console.error('❌ InviteAccept: Error fetching invitation:', error);
+      console.error('❌ InviteAccept: Error type:', typeof error);
+      console.error('❌ InviteAccept: Error code:', (error as any)?.code);
+      console.error('❌ InviteAccept: Error message:', (error as any)?.message);
+      console.error('❌ InviteAccept: Full error object:', JSON.stringify(error, null, 2));
+      
+      // Provide specific error messages based on error type
+      if ((error as any)?.code === 'permission-denied') {
+        setError('Permission denied. Please make sure you are logged in with the correct email.');
+      } else if ((error as any)?.code === 'not-found') {
+        setError('Invitation not found. The invitation may have expired or been deleted.');
+      } else {
+        setError(`Failed to load invitation: ${(error as any)?.message || 'Unknown error'}`);
+      }
     } finally {
       setLoading(false);
     }
-  }, [invitationId]);
+  }, [invitationId, user]);
 
   useEffect(() => {
     if (invitationId) {

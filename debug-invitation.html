@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Invitation</title>
+</head>
+<body>
+    <h1>Debug Invitation</h1>
+    
+    <div>
+        <h2>Test Invitation Creation</h2>
+        <button onclick="testCreateInvitation()">Create Test Invitation</button>
+        <div id="create-result"></div>
+    </div>
+    
+    <div style="margin-top: 20px;">
+        <h2>Test Invitation Reading</h2>
+        <input type="text" id="invitation-id" placeholder="Enter invitation ID" style="width: 300px;">
+        <button onclick="testReadInvitation()">Read Invitation</button>
+        <div id="read-result"></div>
+    </div>
+
+    <script type="module">
+        // Import Firebase modules
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-app.js';
+        import { getFirestore, collection, addDoc, doc, getDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore.js';
+        import { getAuth, signInWithPopup, GoogleAuthProvider } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-auth.js';
+
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyBGjoRRDjXLsmX-hxdQEKez4CxHkIbCcWU",
+            authDomain: "steam-outlet-425507-t1.firebaseapp.com",
+            projectId: "steam-outlet-425507-t1",
+            storageBucket: "steam-outlet-425507-t1.firebasestorage.app",
+            messagingSenderId: "925599253452",
+            appId: "1:925599253452:web:d4abc6968b07bb95131369",
+            measurementId: "G-3YPK4FWRH9"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+        const provider = new GoogleAuthProvider();
+
+        // Make functions available globally
+        window.testCreateInvitation = async function() {
+            try {
+                // Sign in first
+                const result = await signInWithPopup(auth, provider);
+                const user = result.user;
+                console.log('Signed in as:', user.email);
+
+                // Create test invitation
+                const invitationData = {
+                    teamId: 'test-team-' + Date.now(),
+                    teamName: 'Test Team',
+                    email: 'test@example.com',
+                    role: 'member',
+                    status: 'pending',
+                    invitedBy: user.uid,
+                    invitedByName: user.displayName || user.email,
+                    createdAt: serverTimestamp(),
+                    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+                };
+
+                const docRef = await addDoc(collection(db, 'invitations'), invitationData);
+                document.getElementById('create-result').innerHTML = `
+                    <p style="color: green;">✅ Invitation created successfully!</p>
+                    <p>Invitation ID: <strong>${docRef.id}</strong></p>
+                    <p>Use this ID to test reading the invitation.</p>
+                `;
+                console.log('Invitation created with ID:', docRef.id);
+            } catch (error) {
+                console.error('Error creating invitation:', error);
+                document.getElementById('create-result').innerHTML = `
+                    <p style="color: red;">❌ Error: ${error.message}</p>
+                `;
+            }
+        };
+
+        window.testReadInvitation = async function() {
+            try {
+                const invitationId = document.getElementById('invitation-id').value.trim();
+                if (!invitationId) {
+                    alert('Please enter an invitation ID');
+                    return;
+                }
+
+                // Sign in first if not already signed in
+                if (!auth.currentUser) {
+                    await signInWithPopup(auth, provider);
+                }
+
+                console.log('Reading invitation:', invitationId);
+                const invitationRef = doc(db, 'invitations', invitationId);
+                const invitationSnap = await getDoc(invitationRef);
+
+                if (invitationSnap.exists()) {
+                    const data = invitationSnap.data();
+                    document.getElementById('read-result').innerHTML = `
+                        <p style="color: green;">✅ Invitation found!</p>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                    console.log('Invitation data:', data);
+                } else {
+                    document.getElementById('read-result').innerHTML = `
+                        <p style="color: red;">❌ Invitation not found</p>
+                    `;
+                    console.error('Invitation not found');
+                }
+            } catch (error) {
+                console.error('Error reading invitation:', error);
+                document.getElementById('read-result').innerHTML = `
+                    <p style="color: red;">❌ Error: ${error.message}</p>
+                `;
+            }
+        };
+    </script>
+</body>
+</html>

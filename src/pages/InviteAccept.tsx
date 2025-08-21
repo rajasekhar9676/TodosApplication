@@ -22,6 +22,8 @@ const InviteAccept: React.FC = () => {
 
   const fetchInvitation = useCallback(async () => {
     try {
+      console.log('📧 InviteAccept: Starting to fetch invitation with ID:', invitationId);
+      
       if (!invitationId) {
         setError('No invitation ID provided');
         return;
@@ -29,26 +31,61 @@ const InviteAccept: React.FC = () => {
 
       // Fetch real invitation from Firestore
       const invitationRef = doc(db, 'invitations', invitationId);
+      console.log('📧 InviteAccept: Fetching from path:', `invitations/${invitationId}`);
       const invitationSnap = await getDoc(invitationRef);
       
       if (!invitationSnap.exists()) {
+        console.error('❌ InviteAccept: Invitation document not found for ID:', invitationId);
         setError('Invitation not found or has expired');
         return;
       }
 
       const invitationData = invitationSnap.data();
       
+      console.log('📧 InviteAccept: Raw invitation data:', invitationData);
+      
+      // Validate required fields
+      if (!invitationData.teamName || !invitationData.invitedByName || !invitationData.role || !invitationData.teamId || !invitationData.email) {
+        console.error('❌ InviteAccept: Missing required fields:', {
+          teamName: invitationData.teamName,
+          invitedByName: invitationData.invitedByName,
+          role: invitationData.role,
+          teamId: invitationData.teamId,
+          email: invitationData.email
+        });
+        setError('Invitation data is incomplete or corrupted');
+        return;
+      }
+      
       // Check if invitation is still pending
       if (invitationData.status !== 'pending') {
+        console.log('❌ InviteAccept: Invitation status is not pending:', invitationData.status);
         setError('This invitation has already been processed');
         return;
       }
 
       // Check if invitation has expired
-      if (invitationData.expiresAt && invitationData.expiresAt.toDate() < new Date()) {
-        setError('This invitation has expired');
-        return;
+      if (invitationData.expiresAt) {
+        try {
+          const expiryDate = invitationData.expiresAt.toDate();
+          if (expiryDate < new Date()) {
+            console.log('❌ InviteAccept: Invitation expired on:', expiryDate);
+            setError('This invitation has expired');
+            return;
+          }
+        } catch (dateError) {
+          console.error('❌ InviteAccept: Error parsing expiry date:', dateError);
+          // Continue if date parsing fails
+        }
       }
+
+      console.log('✅ InviteAccept: Setting invitation data:', {
+        teamName: invitationData.teamName,
+        invitedByName: invitationData.invitedByName,
+        role: invitationData.role,
+        teamId: invitationData.teamId,
+        email: invitationData.email
+      });
 
       setInvitation({
         teamName: invitationData.teamName,
@@ -132,12 +169,36 @@ const InviteAccept: React.FC = () => {
             </div>
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Error</h2>
             <p className="text-gray-600 dark:text-gray-300 mb-6">{error}</p>
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium"
-            >
-              Go to Dashboard
-            </button>
+            <div className="space-y-3">
+              <button
+                onClick={() => {
+                  console.log('🔍 Debug: Current invitationId:', invitationId);
+                  console.log('🔍 Debug: Current user:', user);
+                  // Try to fetch invitation again for debugging
+                  if (invitationId) {
+                    const invitationRef = doc(db, 'invitations', invitationId);
+                    getDoc(invitationRef).then(snap => {
+                      if (snap.exists()) {
+                        console.log('🔍 Debug: Invitation data:', snap.data());
+                      } else {
+                        console.log('🔍 Debug: Invitation not found');
+                      }
+                    }).catch(err => {
+                      console.error('🔍 Debug: Error fetching invitation:', err);
+                    });
+                  }
+                }}
+                className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg font-medium text-sm"
+              >
+                Debug Invitation
+              </button>
+              <button
+                onClick={() => navigate('/dashboard')}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium"
+              >
+                Go to Dashboard
+              </button>
+            </div>
           </div>
         </div>
       </div>

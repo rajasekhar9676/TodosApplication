@@ -116,7 +116,14 @@ const InviteAccept: React.FC = () => {
       const result = await invitationService.acceptInvitation(invitationId, user.uid);
       
       if (result.success) {
-        navigate('/dashboard');
+        // Redirect to the team they just joined
+        if (result.teamId) {
+          console.log('🎯 Redirecting to team:', result.teamName);
+          navigate(`/teams/${result.teamId}`);
+        } else {
+          // Fallback to dashboard if team info not available
+          navigate('/dashboard');
+        }
       } else {
         setError(result.error || 'Failed to accept invitation');
       }

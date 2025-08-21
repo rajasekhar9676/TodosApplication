@@ -91,7 +91,7 @@ export const invitationService = {
     }
   },
 
-  async acceptInvitation(invitationId: string, userId: string): Promise<{ success: boolean; error?: string }> {
+  async acceptInvitation(invitationId: string, userId: string): Promise<{ success: boolean; error?: string; teamId?: string; teamName?: string }> {
     try {
       console.log('🎯 Accepting invitation:', invitationId);
       console.log('🎯 User ID:', userId);
@@ -189,7 +189,11 @@ export const invitationService = {
       }
 
       console.log('✅ Invitation accepted successfully');
-      return { success: true };
+      return { 
+        success: true, 
+        teamId: invitation.teamId, 
+        teamName: invitation.teamName 
+      };
 
     } catch (error) {
       console.error('❌ Error accepting invitation:', error);

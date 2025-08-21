@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { db } from '../config';
-import { doc, getDoc, collection, query, orderBy, limit, getDocs, addDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, collection, query, orderBy, limit, addDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 
 interface Team {
@@ -43,6 +43,7 @@ const Dashboard: React.FC = () => {
     pendingTasks: 0,
     teamsCount: 0
   });
+  const [allTasks, setAllTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -65,39 +66,54 @@ const Dashboard: React.FC = () => {
           setTeams(teamsData);
           setStats(prev => ({ ...prev, teamsCount: teamsData.length }));
 
-          // Fetch recent tasks from all teams
-          const allTasks: Task[] = [];
+          // Set up real-time listeners for user's tasks only
+          const unsubscribeFunctions: (() => void)[] = [];
+          
           for (const team of teamsData) {
+            // Fetch all team tasks, then filter to show only user's assigned tasks
             const tasksQuery = query(
               collection(db, 'teams', team.id, 'tasks'),
-              orderBy('createdAt', 'desc'),
-              limit(5)
+              orderBy('createdAt', 'desc')
             );
-            const tasksSnap = await getDocs(tasksQuery);
-            const teamTasks = tasksSnap.docs.map(doc => ({ 
-              id: doc.id, 
-              ...doc.data(),
-              teamName: team.name
-            } as Task));
-            allTasks.push(...teamTasks);
+            
+            const unsubscribe = onSnapshot(tasksQuery, (snapshot) => {
+              const allTeamTasks = snapshot.docs.map(doc => ({ 
+                id: doc.id, 
+                ...doc.data(),
+                teamName: team.name
+              } as Task));
+              
+              // Filter tasks to only show user's tasks
+              const userTasks = allTeamTasks.filter(task => 
+                task.assignedTo === user.uid
+              );
+              
+              console.log(`📋 Dashboard: Team ${team.name} - All tasks: ${allTeamTasks.length}, User tasks: ${userTasks.length}`);
+              
+              // Update all tasks with only user's tasks, ensuring no duplicates
+              setAllTasks(prev => {
+                const otherTeamTasks = prev.filter(task => task.teamId !== team.id);
+                const newAllTasks = [...otherTeamTasks, ...userTasks];
+                
+                // Remove duplicates based on task ID
+                const uniqueTasks = newAllTasks.filter((task, index, self) => 
+                  index === self.findIndex(t => t.id === task.id)
+                );
+                
+                console.log(`📋 Dashboard: Total user tasks after update:`, uniqueTasks.length, '(deduplicated)');
+                return uniqueTasks;
+              });
+            }, (error) => {
+              console.error(`Error listening to team ${team.id} tasks:`, error);
+            });
+            
+            unsubscribeFunctions.push(unsubscribe);
           }
 
-          // Sort by creation date and take recent 10
-          const sortedTasks = allTasks.sort((a, b) => {
-            if (!a.createdAt || !b.createdAt) return 0;
-            return b.createdAt.toDate() - a.createdAt.toDate();
-          }).slice(0, 10);
-          setRecentTasks(sortedTasks);
-
-          // Calculate stats
-          const totalTasks = allTasks.length;
-          const completedTasks = allTasks.filter(task => task.status === 'completed').length;
-          setStats(prev => ({
-            ...prev,
-            totalTasks,
-            completedTasks,
-            pendingTasks: totalTasks - completedTasks
-          }));
+          // Cleanup all listeners on unmount
+          return () => {
+            unsubscribeFunctions.forEach(unsubscribe => unsubscribe());
+          };
         }
 
         // Fetch voice notes with real-time listener
@@ -127,6 +143,64 @@ const Dashboard: React.FC = () => {
 
     fetchDashboardData();
   }, [user]);
+
+  // Update stats and recent tasks when allTasks changes
+  useEffect(() => {
+    console.log('🔄 Dashboard: User tasks updated:', allTasks.length, 'tasks');
+    
+    if (allTasks.length > 0) {
+      // Debug: Log all task details
+      console.log('📋 Dashboard: All user tasks:', allTasks.map(task => ({
+        id: task.id,
+        title: task.title,
+        teamName: task.teamName,
+        status: task.status,
+        assignedTo: task.assignedTo
+      })));
+      
+      // Sort by creation date and take recent 10
+      const sortedTasks = allTasks.sort((a, b) => {
+        if (!a.createdAt || !b.createdAt) return 0;
+        return b.createdAt.toDate() - a.createdAt.toDate();
+      }).slice(0, 10);
+      setRecentTasks(sortedTasks);
+
+      // Calculate stats for user's tasks only
+      const totalTasks = allTasks.length;
+      const completedTasks = allTasks.filter(task => task.status === 'completed').length;
+      const pendingTasks = totalTasks - completedTasks;
+      
+      console.log('📊 Dashboard: Updating user stats:', { totalTasks, completedTasks, pendingTasks });
+      
+      setStats(prev => ({
+        ...prev,
+        totalTasks,
+        completedTasks,
+        pendingTasks
+      }));
+    } else {
+      console.log('📊 Dashboard: No user tasks found, resetting stats');
+      setStats(prev => ({
+        ...prev,
+        totalTasks: 0,
+        completedTasks: 0,
+        pendingTasks: 0
+      }));
+    }
+  }, [allTasks]);
+
+  // Debug function to reset tasks state
+  const resetTasksState = () => {
+    console.log('🔄 Dashboard: Manually resetting tasks state');
+    setAllTasks([]);
+    setRecentTasks([]);
+    setStats(prev => ({
+      ...prev,
+      totalTasks: 0,
+      completedTasks: 0,
+      pendingTasks: 0
+    }));
+  };
 
   // Note: handleTextRecorded is kept for future use with voice recording features
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -169,7 +243,7 @@ const Dashboard: React.FC = () => {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-4xl font-bold mb-2">Welcome back!</h1>
-            <p className="text-blue-100 text-lg">Here's what's happening with your tasks today.</p>
+            <p className="text-blue-100 text-lg">Here's what's happening with your personal tasks today.</p>
           </div>
           <div className="hidden md:block">
             <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
@@ -191,7 +265,7 @@ const Dashboard: React.FC = () => {
               </svg>
             </div>
             <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Tasks</p>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">My Tasks</p>
               <p className="text-3xl font-bold text-gray-900 dark:text-white">{stats.totalTasks}</p>
             </div>
           </div>
@@ -239,6 +313,8 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
       </div>
+
+  
 
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

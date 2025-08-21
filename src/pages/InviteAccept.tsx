@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { invitationService } from '../services/invitationService';
 import { useAuth } from '../context/AuthContext';
+import { db } from '../config';
+import { doc, getDoc } from 'firebase/firestore';
 
 const InviteAccept: React.FC = () => {
   const { invitationId } = useParams<{ invitationId: string }>();
@@ -9,30 +11,65 @@ const InviteAccept: React.FC = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
-  const [invitation, setInvitation] = useState<any>(null);
+  const [invitation, setInvitation] = useState<{
+    teamName: string;
+    invitedByName: string;
+    role: string;
+    teamId: string;
+    email: string;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const fetchInvitation = useCallback(async () => {
+    try {
+      if (!invitationId) {
+        setError('No invitation ID provided');
+        return;
+      }
+
+      // Fetch real invitation from Firestore
+      const invitationRef = doc(db, 'invitations', invitationId);
+      const invitationSnap = await getDoc(invitationRef);
+      
+      if (!invitationSnap.exists()) {
+        setError('Invitation not found or has expired');
+        return;
+      }
+
+      const invitationData = invitationSnap.data();
+      
+      // Check if invitation is still pending
+      if (invitationData.status !== 'pending') {
+        setError('This invitation has already been processed');
+        return;
+      }
+
+      // Check if invitation has expired
+      if (invitationData.expiresAt && invitationData.expiresAt.toDate() < new Date()) {
+        setError('This invitation has expired');
+        return;
+      }
+
+      setInvitation({
+        teamName: invitationData.teamName,
+        invitedByName: invitationData.invitedByName,
+        role: invitationData.role,
+        teamId: invitationData.teamId,
+        email: invitationData.email
+      });
+    } catch (error) {
+      console.error('Error fetching invitation:', error);
+      setError('Failed to load invitation');
+    } finally {
+      setLoading(false);
+    }
+  }, [invitationId]);
 
   useEffect(() => {
     if (invitationId) {
       fetchInvitation();
     }
-  }, [invitationId]);
-
-  const fetchInvitation = async () => {
-    try {
-      // For now, we'll just set a mock invitation
-      // In a real app, you'd fetch this from Firestore
-      setInvitation({
-        teamName: 'Sample Team',
-        invitedByName: 'Team Member',
-        role: 'member'
-      });
-    } catch (error) {
-      setError('Failed to load invitation');
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [invitationId, fetchInvitation]);
 
   const handleAccept = async () => {
     if (!user || !invitationId) return;

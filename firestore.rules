@@ -22,7 +22,7 @@ service cloud.firestore {
       // Users can update invitation status when accepting/declining
       allow update: if request.auth != null && 
         resource.data.email == request.auth.token.email &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'acceptedAt', 'acceptedBy']);
     }
     
     // Users can read/write tasks in teams they belong to

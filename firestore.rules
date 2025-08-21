@@ -1,39 +1,9 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Users can read/write their own user document
-    match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-    }
-    
-    // Users can read/write teams (temporary broad permissions for debugging)
-    match /teams/{teamId} {
+    // TEMPORARY: Allow all operations for debugging (REMOVE IN PRODUCTION)
+    match /{document=**} {
       allow read, write: if request.auth != null;
-    }
-    
-    // Users can create, read, and update invitations (temporary broad permissions for debugging)
-    match /invitations/{invitationId} {
-      // Allow creating invitations for authenticated users
-      allow create: if request.auth != null;
-      
-      // Allow reading invitations for authenticated users
-      allow read: if request.auth != null;
-      
-      // Allow updating invitations for authenticated users
-      allow update: if request.auth != null;
-    }
-    
-    // Users can read/write tasks in teams they belong to
-    match /tasks/{taskId} {
-      allow read, write: if request.auth != null && 
-        exists(/databases/$(database)/documents/teams/$(resource.data.teamId)) &&
-        (get(/databases/$(database)/documents/teams/$(resource.data.teamId)).data.members[request.auth.uid] != null ||
-         get(/databases/$(database)/documents/teams/$(resource.data.teamId)).data.createdBy == request.auth.uid);
-    }
-    
-    // Allow reading team data for invitation acceptance
-    match /teams/{teamId} {
-      allow read: if request.auth != null;
     }
   }
 }

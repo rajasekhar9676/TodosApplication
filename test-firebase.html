@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Firebase Connection</title>
+</head>
+<body>
+    <h1>Test Firebase Connection</h1>
+    
+    <div>
+        <h2>Test Basic Firebase Operations</h2>
+        <button onclick="testFirebaseConnection()">Test Firebase Connection</button>
+        <button onclick="testCreateDocument()">Test Create Document</button>
+        <button onclick="testReadDocument()">Test Read Document</button>
+        <div id="test-result"></div>
+    </div>
+
+    <script type="module">
+        // Import Firebase modules
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-app.js';
+        import { getFirestore, collection, addDoc, doc, getDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore.js';
+        import { getAuth, signInWithPopup, GoogleAuthProvider } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-auth.js';
+
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyBGjoRRDjXLsmX-hxdQEKez4CxHkIbCcWU",
+            authDomain: "steam-outlet-425507-t1.firebaseapp.com",
+            projectId: "steam-outlet-425507-t1",
+            storageBucket: "steam-outlet-425507-t1.firebasestorage.app",
+            messagingSenderId: "925599253452",
+            appId: "1:925599253452:web:d4abc6968b07bb95131369",
+            measurementId: "G-3YPK4FWRH9"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+        const provider = new GoogleAuthProvider();
+
+        let testDocId = null;
+
+        // Test Firebase connection
+        window.testFirebaseConnection = async function() {
+            try {
+                document.getElementById('test-result').innerHTML = '<p>Testing Firebase connection...</p>';
+                
+                // Test if we can access Firestore
+                const testCollection = collection(db, 'test');
+                console.log('Firestore collection reference created:', testCollection);
+                
+                document.getElementById('test-result').innerHTML = `
+                    <p style="color: green;">✅ Firebase connection successful!</p>
+                    <p>Project ID: ${firebaseConfig.projectId}</p>
+                    <p>Database: ${db._databaseId}</p>
+                `;
+                
+                console.log('Firebase connection test passed');
+            } catch (error) {
+                console.error('Firebase connection test failed:', error);
+                document.getElementById('test-result').innerHTML = `
+                    <p style="color: red;">❌ Firebase connection failed: ${error.message}</p>
+                `;
+            }
+        };
+
+        // Test creating a document
+        window.testCreateDocument = async function() {
+            try {
+                // Sign in first
+                const result = await signInWithPopup(auth, provider);
+                const user = result.user;
+                console.log('Signed in as:', user.email);
+
+                document.getElementById('test-result').innerHTML = '<p>Creating test document...</p>';
+
+                // Create a test document
+                const testData = {
+                    message: 'Hello Firebase!',
+                    timestamp: serverTimestamp(),
+                    userId: user.uid,
+                    userEmail: user.email
+                };
+
+                const docRef = await addDoc(collection(db, 'test'), testData);
+                testDocId = docRef.id;
+                
+                document.getElementById('test-result').innerHTML = `
+                    <p style="color: green;">✅ Document created successfully!</p>
+                    <p>Document ID: <strong>${testDocId}</strong></p>
+                    <p>Use this ID to test reading the document.</p>
+                `;
+                
+                console.log('Test document created with ID:', testDocId);
+            } catch (error) {
+                console.error('Error creating test document:', error);
+                document.getElementById('test-result').innerHTML = `
+                    <p style="color: red;">❌ Error creating document: ${error.message}</p>
+                    <p>Error code: ${error.code}</p>
+                `;
+            }
+        };
+
+        // Test reading a document
+        window.testReadDocument = async function() {
+            try {
+                if (!testDocId) {
+                    document.getElementById('test-result').innerHTML = '<p style="color: orange;">⚠️ Please create a document first</p>';
+                    return;
+                }
+
+                // Sign in first if not already signed in
+                if (!auth.currentUser) {
+                    await signInWithPopup(auth, provider);
+                }
+
+                document.getElementById('test-result').innerHTML = '<p>Reading test document...</p>';
+
+                console.log('Reading document:', testDocId);
+                const docRef = doc(db, 'test', testDocId);
+                const docSnap = await getDoc(docRef);
+
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    document.getElementById('test-result').innerHTML = `
+                        <p style="color: green;">✅ Document read successfully!</p>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                    console.log('Document data:', data);
+                } else {
+                    document.getElementById('test-result').innerHTML = `
+                        <p style="color: red;">❌ Document not found</p>
+                    `;
+                    console.error('Document not found');
+                }
+            } catch (error) {
+                console.error('Error reading test document:', error);
+                document.getElementById('test-result').innerHTML = `
+                    <p style="color: red;">❌ Error reading document: ${error.message}</p>
+                    <p>Error code: ${error.code}</p>
+                `;
+            }
+        };
+    </script>
+</body>
+</html>

@@ -1,5 +1,5 @@
 import { db } from '../config';
-import { doc, getDoc, addDoc, updateDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, addDoc, updateDoc, collection, serverTimestamp, setDoc } from 'firebase/firestore';
 import { gmailService } from './gmailService';
 
 export interface Invitation {
@@ -94,25 +94,43 @@ export const invitationService = {
   async acceptInvitation(invitationId: string, userId: string): Promise<{ success: boolean; error?: string }> {
     try {
       console.log('🎯 Accepting invitation:', invitationId);
+      console.log('🎯 User ID:', userId);
 
       // 1. Get invitation details
       const invitationRef = doc(db, 'invitations', invitationId);
+      console.log('🎯 Fetching invitation from:', `invitations/${invitationId}`);
+      
       const invitationSnap = await getDoc(invitationRef);
       
       if (!invitationSnap.exists()) {
+        console.error('❌ Invitation not found:', invitationId);
         throw new Error('Invitation not found');
       }
 
       const invitation = invitationSnap.data() as Invitation;
+      console.log('🎯 Invitation data:', invitation);
+      
+      // Validate invitation data
+      if (!invitation.teamId || !invitation.teamName || !invitation.email) {
+        console.error('❌ Invalid invitation data:', invitation);
+        throw new Error('Invalid invitation data');
+      }
       
       if (invitation.status !== 'pending') {
+        console.error('❌ Invitation status is not pending:', invitation.status);
         throw new Error('Invitation is no longer pending');
       }
 
       // 2. Update invitation status
-      await updateDoc(invitationRef, { status: 'accepted' });
+      console.log('🎯 Updating invitation status to accepted');
+      await updateDoc(invitationRef, { 
+        status: 'accepted',
+        acceptedAt: serverTimestamp(),
+        acceptedBy: userId
+      });
 
       // 3. Add user to team
+      console.log('🎯 Adding user to team:', invitation.teamId);
       const teamRef = doc(db, 'teams', invitation.teamId);
       const teamSnap = await getDoc(teamRef);
       
@@ -124,30 +142,70 @@ export const invitationService = {
         const isAlreadyMember = currentMembers.some((member: any) => member.uid === userId);
         
         if (!isAlreadyMember) {
+          const newMember = {
+            uid: userId,
+            role: invitation.role,
+            email: invitation.email,
+            joinedAt: new Date(),
+            invitedBy: invitation.invitedBy
+          };
+          
           await updateDoc(teamRef, {
-            members: [...currentMembers, {
-              uid: userId,
-              role: invitation.role,
-              email: invitation.email,
-            }]
+            members: [...currentMembers, newMember]
           });
-          console.log('✅ User added to team');
+          console.log('✅ User added to team successfully');
+        } else {
+          console.log('ℹ️ User is already a team member');
         }
+      } else {
+        console.error('❌ Team not found:', invitation.teamId);
+        throw new Error('Team not found');
       }
 
       // 4. Add team to user's teams array
+      console.log('🎯 Adding team to user profile');
       const userRef = doc(db, 'users', userId);
       const userSnap = await getDoc(userRef);
-      const userData = userSnap.data();
-      const updatedTeams = [...(userData?.teams || []), invitation.teamId];
-      await updateDoc(userRef, { teams: updatedTeams });   
+      
+      if (userSnap.exists()) {
+        const userData = userSnap.data();
+        const updatedTeams = [...(userData?.teams || []), invitation.teamId];
+        
+        await updateDoc(userRef, { 
+          teams: updatedTeams,
+          lastUpdated: serverTimestamp()
+        });
+        console.log('✅ Team added to user profile');
+      } else {
+        // Create user document if it doesn't exist
+        await setDoc(userRef, {
+          uid: userId,
+          email: invitation.email,
+          teams: [invitation.teamId],
+          createdAt: serverTimestamp(),
+          lastUpdated: serverTimestamp()
+        });
+        console.log('✅ User document created');
+      }
 
       console.log('✅ Invitation accepted successfully');
       return { success: true };
 
     } catch (error) {
       console.error('❌ Error accepting invitation:', error);
-      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+      
+      // Provide more specific error messages
+      if (error instanceof Error) {
+        if (error.message.includes('permission-denied')) {
+          return { success: false, error: 'Permission denied. Please check if you are logged in with the correct email.' };
+        } else if (error.message.includes('not-found')) {
+          return { success: false, error: 'Invitation or team not found. The invitation may have expired.' };
+        } else {
+          return { success: false, error: error.message };
+        }
+      }
+      
+      return { success: false, error: 'Failed to accept invitation. Please try again.' };
     }
   },
 

@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Invitation Flow</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .section { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }
+        .success { color: green; }
+        .error { color: red; }
+        .warning { color: orange; }
+        .info { color: blue; }
+        button { padding: 10px 20px; margin: 5px; border: none; border-radius: 5px; cursor: pointer; }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-warning { background: #ffc107; color: black; }
+        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        .step { margin: 10px 0; padding: 10px; background: #f8f9fa; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Test Complete Invitation Flow</h1>
+    
+    <div class="section">
+        <h2>📋 Test Steps</h2>
+        <div class="step">
+            <strong>Step 1:</strong> Create a test invitation in your main app
+        </div>
+        <div class="step">
+            <strong>Step 2:</strong> Copy the invitation ID from the console or email
+        </div>
+        <div class="step">
+            <strong>Step 3:</strong> Test the invitation acceptance flow
+        </div>
+    </div>
+    
+    <div class="section">
+        <h2>1. Test Invitation Creation</h2>
+        <button onclick="createTestInvitation()" class="btn-primary">Create Test Invitation</button>
+        <div id="create-result"></div>
+    </div>
+    
+    <div class="section">
+        <h2>2. Test Invitation Acceptance</h2>
+        <input type="text" id="invitation-id" placeholder="Enter invitation ID to test" style="width: 300px; padding: 8px; margin: 10px 0;">
+        <br>
+        <button onclick="testInvitationAcceptance()" class="btn-success">Test Invitation Acceptance</button>
+        <div id="accept-result"></div>
+    </div>
+    
+    <div class="section">
+        <h2>3. Test Complete Flow</h2>
+        <button onclick="testCompleteFlow()" class="btn-warning">Test Complete Flow</button>
+        <div id="flow-result"></div>
+    </div>
+    
+    <div class="section">
+        <h2>4. Troubleshooting</h2>
+        <div id="troubleshooting">
+            <h3>Common Issues:</h3>
+            <ul>
+                <li><strong>User not authenticated:</strong> The user needs to be logged in to accept invitations</li>
+                <li><strong>Invitation not found:</strong> Check if the invitation ID is correct</li>
+                <li><strong>Permission denied:</strong> Firebase rules might be too restrictive</li>
+                <li><strong>Email not sending:</strong> Gmail API credentials not configured</li>
+            </ul>
+            
+            <h3>How to Test:</h3>
+            <ol>
+                <li><strong>Create invitation:</strong> Use your main app to invite someone to a team</li>
+                <li><strong>Copy invitation ID:</strong> Get the ID from console logs or email</li>
+                <li><strong>Test acceptance:</strong> Use the invitation ID to test the acceptance flow</li>
+                <li><strong>Check console:</strong> Look for detailed logs in browser console</li>
+            </ol>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-app.js';
+        import { getFirestore, collection, addDoc, doc, getDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore.js';
+        import { getAuth, signInWithPopup, GoogleAuthProvider } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-auth.js';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBGjoRRDjXLsmX-hxdQEKez4CxHkIbCcWU",
+            authDomain: "steam-outlet-425507-t1.firebaseapp.com",
+            projectId: "steam-outlet-425507-t1",
+            storageBucket: "steam-outlet-425507-t1.firebasestorage.app",
+            messagingSenderId: "925599253452",
+            appId: "1:925599253452:web:d4abc6968b07bb95131369",
+            measurementId: "G-3YPK4FWRH9"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+        const provider = new GoogleAuthProvider();
+
+        let testInvitationId = null;
+
+        // Create test invitation
+        window.createTestInvitation = async function() {
+            try {
+                const result = document.getElementById('create-result');
+                result.innerHTML = '<p>Creating test invitation...</p>';
+                
+                // Sign in first
+                const authResult = await signInWithPopup(auth, provider);
+                console.log('Signed in as:', authResult.user.email);
+                
+                // Create test invitation
+                const invitationData = {
+                    teamId: 'test-team-' + Date.now(),
+                    teamName: 'Test Team',
+                    email: 'test@example.com',
+                    role: 'member',
+                    status: 'pending',
+                    invitedBy: authResult.user.uid,
+                    invitedByName: authResult.user.displayName || authResult.user.email,
+                    createdAt: serverTimestamp(),
+                    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+                };
+                
+                const docRef = await addDoc(collection(db, 'invitations'), invitationData);
+                testInvitationId = docRef.id;
+                
+                result.innerHTML = `
+                    <p class="success">✅ Test invitation created successfully!</p>
+                    <p><strong>Invitation ID:</strong> ${testInvitationId}</p>
+                    <p><strong>Team:</strong> ${invitationData.teamName}</p>
+                    <p><strong>Role:</strong> ${invitationData.role}</p>
+                    <p>Use this ID to test the acceptance flow.</p>
+                `;
+                
+                // Auto-fill the invitation ID input
+                document.getElementById('invitation-id').value = testInvitationId;
+                
+            } catch (error) {
+                result.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                console.error('Create invitation error:', error);
+            }
+        };
+
+        // Test invitation acceptance
+        window.testInvitationAcceptance = async function() {
+            try {
+                const result = document.getElementById('accept-result');
+                const invitationId = document.getElementById('invitation-id').value.trim();
+                
+                if (!invitationId) {
+                    result.innerHTML = '<p class="warning">⚠️ Please enter an invitation ID</p>';
+                    return;
+                }
+                
+                result.innerHTML = '<p>Testing invitation acceptance...</p>';
+                
+                // Sign in first if not already signed in
+                if (!auth.currentUser) {
+                    await signInWithPopup(auth, provider);
+                }
+                
+                // Try to read the invitation
+                const invitationRef = doc(db, 'invitations', invitationId);
+                const invitationSnap = await getDoc(invitationRef);
+                
+                if (invitationSnap.exists()) {
+                    const data = invitationSnap.data();
+                    result.innerHTML = `
+                        <p class="success">✅ Invitation found!</p>
+                        <p><strong>Team:</strong> ${data.teamName}</p>
+                        <p><strong>Role:</strong> ${data.role}</p>
+                        <p><strong>Status:</strong> ${data.status}</p>
+                        <p><strong>Invited by:</strong> ${data.invitedByName}</p>
+                        <p>Now test the complete flow in your main app!</p>
+                    `;
+                } else {
+                    result.innerHTML = '<p class="error">❌ Invitation not found</p>';
+                }
+                
+            } catch (error) {
+                result.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                console.error('Test acceptance error:', error);
+            }
+        };
+
+        // Test complete flow
+        window.testCompleteFlow = async function() {
+            const result = document.getElementById('flow-result');
+            result.innerHTML = `
+                <p class="info">📋 Complete Flow Test Instructions:</p>
+                <ol>
+                    <li><strong>Open your main app</strong> in a new tab</li>
+                    <li><strong>Create a team</strong> or use an existing one</li>
+                    <li><strong>Invite a member</strong> to the team</li>
+                    <li><strong>Copy the invitation ID</strong> from console logs</li>
+                    <li><strong>Open the invitation link</strong> in an incognito/private window</li>
+                    <li><strong>Sign in</strong> with a different Google account</li>
+                    <li><strong>Accept the invitation</strong> and verify it works</li>
+                </ol>
+                <p><strong>Expected Flow:</strong></p>
+                <ul>
+                    <li>User clicks invitation link → Redirected to sign in</li>
+                    <li>User signs in → Automatically redirected back to invitation</li>
+                    <li>User accepts invitation → Added to team</li>
+                    <li>User redirected to team page → Can see team tasks</li>
+                </ul>
+            `;
+        };
+    </script>
+</body>
+</html>

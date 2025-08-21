@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Simple Firebase Test</title>
+</head>
+<body>
+    <h1>Simple Firebase Test</h1>
+    <button onclick="testSimple()">Test Simple Firebase Operation</button>
+    <div id="result"></div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-app.js';
+        import { getFirestore, collection, addDoc } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore.js';
+        import { getAuth, signInWithPopup, GoogleAuthProvider } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-auth.js';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBGjoRRDjXLsmX-hxdQEKez4CxHkIbCcWU",
+            authDomain: "steam-outlet-425507-t1.firebaseapp.com",
+            projectId: "steam-outlet-425507-t1",
+            storageBucket: "steam-outlet-425507-t1.firebasestorage.app",
+            messagingSenderId: "925599253452",
+            appId: "1:925599253452:web:d4abc6968b07bb95131369",
+            measurementId: "G-3YPK4FWRH9"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+        const provider = new GoogleAuthProvider();
+
+        window.testSimple = async function() {
+            try {
+                document.getElementById('result').innerHTML = 'Testing...';
+                
+                // Sign in
+                const result = await signInWithPopup(auth, provider);
+                console.log('Signed in:', result.user.email);
+                
+                // Try to create a simple document
+                const docRef = await addDoc(collection(db, 'test'), {
+                    message: 'Test',
+                    timestamp: new Date()
+                });
+                
+                document.getElementById('result').innerHTML = `✅ Success! Document created with ID: ${docRef.id}`;
+                console.log('Document created:', docRef.id);
+                
+            } catch (error) {
+                document.getElementById('result').innerHTML = `❌ Error: ${error.message}`;
+                console.error('Error:', error);
+            }
+        };
+    </script>
+</body>
+</html>

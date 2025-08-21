@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug User Document Structure</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .section { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }
+        .success { color: green; }
+        .error { color: red; }
+        .warning { color: orange; }
+        .info { color: blue; }
+        button { padding: 10px 20px; margin: 5px; border: none; border-radius: 5px; cursor: pointer; }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-warning { background: #ffc107; color: black; }
+        .btn-danger { background: #dc3545; color: white; }
+        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Debug User Document Structure</h1>
+    
+    <div class="section">
+        <h2>1. Sign In and Check User Document</h2>
+        <button onclick="signInAndCheck()" class="btn-primary">Sign In & Check Document</button>
+        <div id="signin-result"></div>
+    </div>
+    
+    <div class="section">
+        <h2>2. Raw User Document Data</h2>
+        <button onclick="showRawUserData()" class="btn-success">Show Raw User Data</button>
+        <div id="raw-data-result"></div>
+    </div>
+    
+    <div class="section">
+        <h2>3. Fix User Document</h2>
+        <button onclick="fixUserDocument()" class="btn-warning">Add Teams Field to User</button>
+        <button onclick="migrateFromJoinedTeams()" class="btn-info">Migrate from joinedTeams</button>
+        <div id="fix-result"></div>
+    </div>
+    
+    <div class="section">
+        <h2>4. Test Team Assignment</h2>
+        <input type="text" id="team-id" placeholder="Enter team ID to add" style="width: 300px; padding: 8px;">
+        <button onclick="addTeamToUser()" class="btn-success">Add Team to User</button>
+        <div id="team-result"></div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-app.js';
+        import { getFirestore, doc, getDoc, updateDoc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore.js';
+        import { getAuth, signInWithPopup, GoogleAuthProvider } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-auth.js';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBGjoRRDjXLsmX-hxdQEKez4CxHkIbCcWU",
+            authDomain: "steam-outlet-425507-t1.firebaseapp.com",
+            projectId: "steam-outlet-425507-t1",
+            storageBucket: "steam-outlet-425507-t1.firebasestorage.app",
+            messagingSenderId: "925599253452",
+            appId: "1:925599253452:web:d4abc6968b07bb95131369",
+            measurementId: "G-3YPK4FWRH9"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+        const provider = new GoogleAuthProvider();
+
+        let currentUser = null;
+
+        // Sign in and check user document
+        window.signInAndCheck = async function() {
+            try {
+                const result = document.getElementById('signin-result');
+                result.innerHTML = '<p>Signing in...</p>';
+                
+                const authResult = await signInWithPopup(auth, provider);
+                currentUser = authResult.user;
+                
+                result.innerHTML = `
+                    <p class="success">✅ Signed in successfully!</p>
+                    <p><strong>User ID:</strong> ${currentUser.uid}</p>
+                    <p><strong>Email:</strong> ${currentUser.email}</p>
+                    <p><strong>Display Name:</strong> ${currentUser.displayName || 'None'}</p>
+                `;
+                
+                // Automatically check user document
+                await showRawUserData();
+                
+            } catch (error) {
+                document.getElementById('signin-result').innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                console.error('Sign in error:', error);
+            }
+        };
+
+        // Show raw user data
+        window.showRawUserData = async function() {
+            try {
+                if (!currentUser && auth.currentUser) {
+                    currentUser = auth.currentUser;
+                }
+                
+                if (!currentUser) {
+                    document.getElementById('raw-data-result').innerHTML = '<p class="warning">⚠️ Please sign in first</p>';
+                    return;
+                }
+                
+                const result = document.getElementById('raw-data-result');
+                result.innerHTML = '<p>Fetching user document...</p>';
+                
+                const userRef = doc(db, 'users', currentUser.uid);
+                const userSnap = await getDoc(userRef);
+                
+                if (userSnap.exists()) {
+                    const userData = userSnap.data();
+                    
+                    result.innerHTML = `
+                        <p class="success">✅ User document found!</p>
+                        <h3>Raw Document Data:</h3>
+                        <pre>${JSON.stringify(userData, null, 2)}</pre>
+                        
+                        <h3>Field Analysis:</h3>
+                        <p><strong>teams field:</strong> ${userData.teams ? `Array with ${userData.teams.length} items` : 'undefined/missing'}</p>
+                        <p><strong>joinedTeams field:</strong> ${userData.joinedTeams ? `Array with ${userData.joinedTeams.length} items` : 'undefined/missing'}</p>
+                        <p><strong>role field:</strong> ${userData.role || 'undefined'}</p>
+                        <p><strong>email field:</strong> ${userData.email || 'undefined'}</p>
+                        <p><strong>displayName field:</strong> ${userData.displayName || 'undefined'}</p>
+                    `;
+                    
+                    console.log('User document data:', userData);
+                } else {
+                    result.innerHTML = `
+                        <p class="error">❌ User document not found!</p>
+                        <p>This explains why teams aren't showing - no user document exists.</p>
+                    `;
+                    console.log('No user document found for:', currentUser.uid);
+                }
+                
+            } catch (error) {
+                document.getElementById('raw-data-result').innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                console.error('Error fetching user data:', error);
+            }
+        };
+
+        // Fix user document by adding teams field
+        window.fixUserDocument = async function() {
+            try {
+                if (!currentUser && auth.currentUser) {
+                    currentUser = auth.currentUser;
+                }
+                
+                if (!currentUser) {
+                    document.getElementById('fix-result').innerHTML = '<p class="warning">⚠️ Please sign in first</p>';
+                    return;
+                }
+                
+                const result = document.getElementById('fix-result');
+                result.innerHTML = '<p>Fixing user document...</p>';
+                
+                const userRef = doc(db, 'users', currentUser.uid);
+                const userSnap = await getDoc(userRef);
+                
+                if (userSnap.exists()) {
+                    // Update existing document
+                    const userData = userSnap.data();
+                    const updates = {};
+                    
+                    // Add teams field if missing
+                    if (!userData.teams) {
+                        updates.teams = userData.joinedTeams || [];
+                    }
+                    
+                    // Add other missing fields
+                    if (!userData.email) updates.email = currentUser.email;
+                    if (!userData.displayName) updates.displayName = currentUser.displayName || currentUser.email?.split('@')[0] || '';
+                    if (!userData.role) updates.role = 'member';
+                    
+                    updates.lastUpdated = serverTimestamp();
+                    
+                    await updateDoc(userRef, updates);
+                    
+                    result.innerHTML = `
+                        <p class="success">✅ User document updated!</p>
+                        <p><strong>Updates applied:</strong></p>
+                        <pre>${JSON.stringify(updates, null, 2)}</pre>
+                    `;
+                } else {
+                    // Create new document
+                    const newUserData = {
+                        uid: currentUser.uid,
+                        email: currentUser.email,
+                        displayName: currentUser.displayName || currentUser.email?.split('@')[0] || '',
+                        role: 'member',
+                        teams: [],
+                        createdAt: serverTimestamp(),
+                        lastUpdated: serverTimestamp()
+                    };
+                    
+                    await setDoc(userRef, newUserData);
+                    
+                    result.innerHTML = `
+                        <p class="success">✅ New user document created!</p>
+                        <pre>${JSON.stringify(newUserData, null, 2)}</pre>
+                    `;
+                }
+                
+                // Refresh the raw data display
+                setTimeout(showRawUserData, 1000);
+                
+            } catch (error) {
+                document.getElementById('fix-result').innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                console.error('Error fixing user document:', error);
+            }
+        };
+
+        // Migrate from joinedTeams to teams
+        window.migrateFromJoinedTeams = async function() {
+            try {
+                if (!currentUser && auth.currentUser) {
+                    currentUser = auth.currentUser;
+                }
+                
+                if (!currentUser) {
+                    document.getElementById('fix-result').innerHTML = '<p class="warning">⚠️ Please sign in first</p>';
+                    return;
+                }
+                
+                const result = document.getElementById('fix-result');
+                result.innerHTML = '<p>Migrating from joinedTeams to teams...</p>';
+                
+                const userRef = doc(db, 'users', currentUser.uid);
+                const userSnap = await getDoc(userRef);
+                
+                if (userSnap.exists()) {
+                    const userData = userSnap.data();
+                    
+                    if (userData.joinedTeams && userData.joinedTeams.length > 0) {
+                        await updateDoc(userRef, {
+                            teams: userData.joinedTeams,
+                            lastUpdated: serverTimestamp()
+                        });
+                        
+                        result.innerHTML = `
+                            <p class="success">✅ Migration completed!</p>
+                            <p>Moved ${userData.joinedTeams.length} teams from 'joinedTeams' to 'teams' field.</p>
+                        `;
+                    } else {
+                        result.innerHTML = '<p class="warning">⚠️ No joinedTeams field found to migrate</p>';
+                    }
+                } else {
+                    result.innerHTML = '<p class="error">❌ User document not found</p>';
+                }
+                
+                // Refresh the raw data display
+                setTimeout(showRawUserData, 1000);
+                
+            } catch (error) {
+                document.getElementById('fix-result').innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                console.error('Error migrating teams:', error);
+            }
+        };
+
+        // Add team to user
+        window.addTeamToUser = async function() {
+            try {
+                if (!currentUser && auth.currentUser) {
+                    currentUser = auth.currentUser;
+                }
+                
+                if (!currentUser) {
+                    document.getElementById('team-result').innerHTML = '<p class="warning">⚠️ Please sign in first</p>';
+                    return;
+                }
+                
+                const teamId = document.getElementById('team-id').value.trim();
+                if (!teamId) {
+                    document.getElementById('team-result').innerHTML = '<p class="warning">⚠️ Please enter a team ID</p>';
+                    return;
+                }
+                
+                const result = document.getElementById('team-result');
+                result.innerHTML = '<p>Adding team to user...</p>';
+                
+                const userRef = doc(db, 'users', currentUser.uid);
+                const userSnap = await getDoc(userRef);
+                
+                if (userSnap.exists()) {
+                    const userData = userSnap.data();
+                    const currentTeams = userData.teams || [];
+                    
+                    if (!currentTeams.includes(teamId)) {
+                        await updateDoc(userRef, {
+                            teams: [...currentTeams, teamId],
+                            lastUpdated: serverTimestamp()
+                        });
+                        
+                        result.innerHTML = `
+                            <p class="success">✅ Team added successfully!</p>
+                            <p><strong>Team ID:</strong> ${teamId}</p>
+                            <p><strong>Total teams:</strong> ${currentTeams.length + 1}</p>
+                        `;
+                    } else {
+                        result.innerHTML = '<p class="warning">⚠️ Team already exists in user document</p>';
+                    }
+                } else {
+                    result.innerHTML = '<p class="error">❌ User document not found</p>';
+                }
+                
+                // Clear input and refresh display
+                document.getElementById('team-id').value = '';
+                setTimeout(showRawUserData, 1000);
+                
+            } catch (error) {
+                document.getElementById('team-result').innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                console.error('Error adding team:', error);
+            }
+        };
+
+        // Auto-sign in if already authenticated
+        auth.onAuthStateChanged((user) => {
+            if (user && !currentUser) {
+                currentUser = user;
+                console.log('Auto-detected signed in user:', user.email);
+            }
+        });
+    </script>
+</body>
+</html>

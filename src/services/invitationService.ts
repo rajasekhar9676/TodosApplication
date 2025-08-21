@@ -122,70 +122,121 @@ export const invitationService = {
       }
 
       // 2. Update invitation status
-      console.log('🎯 Updating invitation status to accepted');
-      await updateDoc(invitationRef, { 
-        status: 'accepted',
-        acceptedAt: serverTimestamp(),
-        acceptedBy: userId
-      });
+      console.log('🎯 Step 2: Updating invitation status to accepted...');
+      try {
+        await updateDoc(invitationRef, { 
+          status: 'accepted',
+          acceptedAt: serverTimestamp(),
+          acceptedBy: userId
+        });
+        console.log('✅ Invitation status updated successfully');
+      } catch (error) {
+        console.error('❌ Failed to update invitation status:', error);
+        throw new Error(`Failed to update invitation status: ${error}`);
+      }
 
       // 3. Add user to team
-      console.log('🎯 Adding user to team:', invitation.teamId);
+      console.log('🎯 Step 3: Adding user to team:', invitation.teamId);
       const teamRef = doc(db, 'teams', invitation.teamId);
       const teamSnap = await getDoc(teamRef);
       
-      if (teamSnap.exists()) {
-        const teamData = teamSnap.data();
-        const currentMembers = teamData.members || [];
-        
-        // Check if user is already a member
-        const isAlreadyMember = currentMembers.some((member: any) => member.uid === userId);
-        
-        if (!isAlreadyMember) {
-          const newMember = {
-            uid: userId,
-            role: invitation.role,
-            email: invitation.email,
-            joinedAt: new Date(),
-            invitedBy: invitation.invitedBy
-          };
-          
-          await updateDoc(teamRef, {
-            members: [...currentMembers, newMember]
-          });
-          console.log('✅ User added to team successfully');
-        } else {
-          console.log('ℹ️ User is already a team member');
-        }
-      } else {
+      if (!teamSnap.exists()) {
         console.error('❌ Team not found:', invitation.teamId);
         throw new Error('Team not found');
       }
 
-      // 4. Add team to user's teams array
-      console.log('🎯 Adding team to user profile');
+      const teamData = teamSnap.data();
+      const currentMembers = teamData.members || [];
+      console.log('🎯 Current team members:', currentMembers.length);
+      
+      // Check if user is already a member
+      const isAlreadyMember = currentMembers.some((member: any) => member.uid === userId);
+      
+      if (!isAlreadyMember) {
+        const newMember = {
+          uid: userId,
+          role: invitation.role as 'admin' | 'member',
+          email: invitation.email,
+          displayName: invitation.invitedByName, // Store the inviter's name as display name
+          joinedAt: new Date(),
+          invitedBy: invitation.invitedBy
+        };
+        
+        console.log('🎯 Adding new member to team:', newMember);
+        
+        try {
+          await updateDoc(teamRef, {
+            members: [...currentMembers, newMember]
+          });
+          console.log('✅ User added to team successfully');
+        } catch (error) {
+          console.error('❌ Failed to add user to team:', error);
+          throw new Error(`Failed to add user to team: ${error}`);
+        }
+      } else {
+        console.log('ℹ️ User is already a team member');
+      }
+
+      // 4. Add team to user's teams array (with migration support)
+      console.log('🎯 Step 4: Adding team to user profile');
       const userRef = doc(db, 'users', userId);
       const userSnap = await getDoc(userRef);
       
       if (userSnap.exists()) {
         const userData = userSnap.data();
-        const updatedTeams = [...(userData?.teams || []), invitation.teamId];
+        console.log('🎯 Current user data:', userData);
         
-        await updateDoc(userRef, { 
-          teams: updatedTeams,
-          lastUpdated: serverTimestamp()
-        });
-        console.log('✅ Team added to user profile');
+        // Migrate existing user document if needed
+        let currentTeams = userData?.teams || [];
+        const joinedTeams = userData?.joinedTeams || [];
+        
+        console.log('🎯 Current teams array:', currentTeams);
+        console.log('🎯 Current joinedTeams array:', joinedTeams);
+        
+        // If user has joinedTeams but no teams field, migrate the data
+        if (joinedTeams.length > 0 && (!userData.teams || userData.teams.length === 0)) {
+          console.log('🔄 Migrating user document: moving teams from joinedTeams to teams field');
+          currentTeams = [...joinedTeams];
+          
+          // Update the document to use the teams field and remove joinedTeams
+          await updateDoc(userRef, {
+            teams: currentTeams,
+            joinedTeams: [], // Clear the old field
+            lastUpdated: serverTimestamp()
+          });
+          console.log('✅ User document migrated successfully');
+        }
+        
+        // Add the new team
+        const updatedTeams = [...currentTeams, invitation.teamId];
+        console.log('🎯 Updated teams array:', updatedTeams);
+        
+        try {
+          await updateDoc(userRef, { 
+            teams: updatedTeams,
+            lastUpdated: serverTimestamp()
+          });
+          console.log('✅ Team added to user profile successfully');
+        } catch (error) {
+          console.error('❌ Failed to add team to user profile:', error);
+          throw new Error(`Failed to add team to user profile: ${error}`);
+        }
       } else {
         // Create user document if it doesn't exist
-        await setDoc(userRef, {
-          uid: userId,
-          email: invitation.email,
-          teams: [invitation.teamId],
-          createdAt: serverTimestamp(),
-          lastUpdated: serverTimestamp()
-        });
-        console.log('✅ User document created');
+        console.log('🎯 Creating new user document with team');
+        try {
+          await setDoc(userRef, {
+            uid: userId,
+            email: invitation.email,
+            teams: [invitation.teamId],
+            createdAt: serverTimestamp(),
+            lastUpdated: serverTimestamp()
+          });
+          console.log('✅ User document created successfully');
+        } catch (error) {
+          console.error('❌ Failed to create user document:', error);
+          throw new Error(`Failed to create user document: ${error}`);
+        }
       }
 
       console.log('✅ Invitation accepted successfully');

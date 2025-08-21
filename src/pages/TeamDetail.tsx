@@ -1,17 +1,19 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { db } from '../config';
 import { doc, getDoc, updateDoc, collection, addDoc, serverTimestamp, getDocs } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import { invitationService } from '../services/invitationService';
 import { gmailService } from '../services/gmailService';
 import TeamTasks from '../components/TeamTasks';
+import TeamMembers from '../components/TeamMembers';
+import TeamOverview from '../components/TeamOverview';
 
 interface Team {
   id: string;
   name: string;
   description: string;
-  members: Array<{ uid: string; role: string; email?: string; displayName?: string }>;
+  members: Array<{ uid: string; role: 'admin' | 'member'; email?: string; displayName?: string }>;
   invitations?: Array<{ id: string; email: string; role: string; status: string; createdAt: Date }>;
   createdAt: any;
   createdBy: string;
@@ -31,9 +33,11 @@ interface Task {
 const TeamDetail: React.FC = () => {
   const { teamId } = useParams<{ teamId: string }>();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [team, setTeam] = useState<Team | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'overview' | 'tasks' | 'members'>('overview');
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [showInviteMember, setShowInviteMember] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -285,6 +289,78 @@ const TeamDetail: React.FC = () => {
           >
             Create Task
           </button>
+        </div>
+      </div>
+
+      {/* Tab Navigation */}
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-gray-200/50 dark:border-slate-700/50">
+        <div className="border-b border-gray-200/50 dark:border-slate-700/50">
+          <nav className="flex space-x-8 px-6">
+            <button
+              onClick={() => setActiveTab('overview')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                activeTab === 'overview'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+              }`}
+            >
+              Overview
+            </button>
+            <button
+              onClick={() => setActiveTab('tasks')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                activeTab === 'tasks'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+              }`}
+            >
+              Tasks
+            </button>
+            <button
+              onClick={() => setActiveTab('members')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                activeTab === 'members'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+              }`}
+            >
+              Members
+            </button>
+          </nav>
+        </div>
+        
+        <div className="p-6">
+          {activeTab === 'overview' && (
+            <TeamOverview
+              teamId={teamId!}
+              teamName={team.name}
+              description={team.description}
+              members={team.members}
+              createdAt={team.createdAt}
+              createdBy={team.createdBy}
+            />
+          )}
+          
+          {activeTab === 'tasks' && (
+            <TeamTasks
+              teamId={teamId!}
+              teamName={team.name}
+              members={team.members}
+              userRole={userRole}
+            />
+          )}
+          
+          {activeTab === 'members' && (
+            <TeamMembers
+              teamId={teamId!}
+              teamName={team.name}
+              members={team.members}
+              userRole={userRole}
+              onMembersUpdate={(updatedMembers) => {
+                setTeam({ ...team, members: updatedMembers });
+              }}
+            />
+          )}
         </div>
       </div>
 

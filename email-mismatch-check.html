@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Email Mismatch Check</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .section { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }
+        .success { color: green; }
+        .error { color: red; }
+        .warning { color: orange; }
+        .info { color: blue; }
+        button { padding: 10px 20px; margin: 5px; border: none; border-radius: 5px; cursor: pointer; }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-warning { background: #ffc107; color: black; }
+        .btn-danger { background: #dc3545; color: white; }
+        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        input { padding: 8px; margin: 5px; border: 1px solid #ddd; border-radius: 4px; width: 300px; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Email Mismatch Check</h1>
+    
+    <div class="section">
+        <h2>1. Sign In</h2>
+        <button onclick="signIn()" class="btn-primary">Sign In with Google</button>
+        <div id="signin-result"></div>
+    </div>
+    
+    <div class="section">
+        <h2>2. Check Your Current Email</h2>
+        <button onclick="checkCurrentEmail()" class="btn-info">Check My Current Email</button>
+        <div id="email-result"></div>
+    </div>
+    
+    <div class="section">
+        <h2>3. Find Invitations for Your Email</h2>
+        <button onclick="findInvitations()" class="btn-success">Find My Invitations</button>
+        <div id="invitations-result"></div>
+    </div>
+    
+    <div class="section">
+        <h2>4. Check Specific Invitation</h2>
+        <input type="text" id="invitation-id" placeholder="Enter invitation ID to check">
+        <button onclick="checkSpecificInvitation()" class="btn-warning">Check Invitation</button>
+        <div id="specific-result"></div>
+    </div>
+    
+    <div class="section">
+        <h2>5. Fix Email Mismatch</h2>
+        <p>If you find an invitation with a different email, you can manually add the team to your profile.</p>
+        <input type="text" id="team-id" placeholder="Enter team ID to add to your profile">
+        <button onclick="addTeamManually()" class="btn-danger">Add Team Manually</button>
+        <div id="fix-result"></div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-app.js';
+        import { getFirestore, doc, getDoc, updateDoc, setDoc, collection, query, where, getDocs } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore.js';
+        import { getAuth, signInWithPopup, GoogleAuthProvider } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-auth.js';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBGjoRRDjXLsmX-hxdQEKez4CxHkIbCcWU",
+            authDomain: "steam-outlet-425507-t1.firebaseapp.com",
+            projectId: "steam-outlet-425507-t1",
+            storageBucket: "steam-outlet-425507-t1.firebasestorage.app",
+            messagingSenderId: "925599253452",
+            appId: "1:925599253452:web:d4abc6968b07bb95131369",
+            measurementId: "G-3YPK4FWRH9"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+        const provider = new GoogleAuthProvider();
+
+        let currentUser = null;
+
+        // Sign in
+        window.signIn = async function() {
+            try {
+                const result = document.getElementById('signin-result');
+                result.innerHTML = '<p>Signing in...</p>';
+                
+                const authResult = await signInWithPopup(auth, provider);
+                currentUser = authResult.user;
+                
+                result.innerHTML = `
+                    <p class="success">✅ Signed in successfully!</p>
+                    <p><strong>User ID:</strong> ${currentUser.uid}</p>
+                    <p><strong>Email:</strong> ${currentUser.email}</p>
+                    <p><strong>Display Name:</strong> ${currentUser.displayName || 'None'}</p>
+                `;
+                
+                console.log('✅ Signed in as:', currentUser.email);
+                
+            } catch (error) {
+                document.getElementById('signin-result').innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                console.error('Sign in error:', error);
+            }
+        };
+
+        // Check current email
+        window.checkCurrentEmail = function() {
+            const result = document.getElementById('email-result');
+            if (currentUser && auth.currentUser) {
+                currentUser = auth.currentUser;
+            }
+            
+            if (currentUser) {
+                result.innerHTML = `
+                    <p class="success">✅ Your current email information:</p>
+                    <p><strong>Email:</strong> ${currentUser.email}</p>
+                    <p><strong>User ID:</strong> ${currentUser.uid}</p>
+                    <p><strong>Display Name:</strong> ${currentUser.displayName || 'None'}</p>
+                `;
+            } else {
+                result.innerHTML = '<p class="warning">⚠️ Please sign in first</p>';
+            }
+        };
+
+        // Find invitations for current user
+        window.findInvitations = async function() {
+            try {
+                if (!currentUser && auth.currentUser) {
+                    currentUser = auth.currentUser;
+                }
+                
+                if (!currentUser) {
+                    document.getElementById('invitations-result').innerHTML = '<p class="warning">⚠️ Please sign in first</p>';
+                    return;
+                }
+                
+                const result = document.getElementById('invitations-result');
+                result.innerHTML = '<p>Searching for invitations...</p>';
+                
+                // Search for invitations by email
+                const invitationsQuery = query(
+                    collection(db, 'invitations'),
+                    where('email', '==', currentUser.email)
+                );
+                
+                const invitationsSnap = await getDocs(invitationsQuery);
+                
+                if (!invitationsSnap.empty) {
+                    const invitations = [];
+                    invitationsSnap.forEach(doc => {
+                        invitations.push({ id: doc.id, ...doc.data() });
+                    });
+                    
+                    result.innerHTML = `
+                        <p class="success">✅ Found ${invitations.length} invitation(s) for your email:</p>
+                        ${invitations.map(inv => `
+                            <div style="border: 1px solid #ddd; padding: 10px; margin: 10px 0; border-radius: 5px;">
+                                <p><strong>Invitation ID:</strong> ${inv.id}</p>
+                                <p><strong>Team ID:</strong> ${inv.teamId}</p>
+                                <p><strong>Team Name:</strong> ${inv.teamName}</p>
+                                <p><strong>Email:</strong> ${inv.email}</p>
+                                <p><strong>Status:</strong> ${inv.status}</p>
+                                <p><strong>Role:</strong> ${inv.role}</p>
+                            </div>
+                        `).join('')}
+                    `;
+                } else {
+                    // Search for invitations by user ID (accepted invitations)
+                    const acceptedQuery = query(
+                        collection(db, 'invitations'),
+                        where('acceptedBy', '==', currentUser.uid)
+                    );
+                    
+                    const acceptedSnap = await getDocs(acceptedQuery);
+                    
+                    if (!acceptedSnap.empty) {
+                        const accepted = [];
+                        acceptedSnap.forEach(doc => {
+                            accepted.push({ id: doc.id, ...doc.data() });
+                        });
+                        
+                        result.innerHTML = `
+                            <p class="warning">⚠️ No invitations found for your email, but found ${accepted.length} invitation(s) you accepted:</p>
+                            ${accepted.map(inv => `
+                                <div style="border: 1px solid #ddd; padding: 10px; margin: 10px 0; border-radius: 5px;">
+                                    <p><strong>Invitation ID:</strong> ${inv.id}</p>
+                                    <p><strong>Team ID:</strong> ${inv.teamId}</p>
+                                    <p><strong>Team Name:</strong> ${inv.teamName}</p>
+                                    <p><strong>Email in invitation:</strong> ${inv.email}</p>
+                                    <p><strong>Your current email:</strong> ${currentUser.email}</p>
+                                    <p><strong>Status:</strong> ${inv.status}</p>
+                                    <p><strong>Role:</strong> ${inv.role}</p>
+                                    <p class="warning"><strong>⚠️ EMAIL MISMATCH DETECTED!</strong></p>
+                                </div>
+                            `).join('')}
+                        `;
+                    } else {
+                        result.innerHTML = `
+                            <p class="warning">⚠️ No invitations found for your email (${currentUser.email})</p>
+                            <p>This could mean:</p>
+                            <ul>
+                                <li>You haven't been invited to any teams yet</li>
+                                <li>The invitation was sent to a different email address</li>
+                                <li>All invitations have expired or been processed</li>
+                            </ul>
+                        `;
+                    }
+                }
+                
+            } catch (error) {
+                document.getElementById('invitations-result').innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                console.error('Error finding invitations:', error);
+            }
+        };
+
+        // Check specific invitation
+        window.checkSpecificInvitation = async function() {
+            try {
+                const invitationId = document.getElementById('invitation-id').value.trim();
+                if (!invitationId) {
+                    document.getElementById('specific-result').innerHTML = '<p class="warning">⚠️ Please enter an invitation ID</p>';
+                    return;
+                }
+                
+                const result = document.getElementById('specific-result');
+                result.innerHTML = '<p>Checking invitation...</p>';
+                
+                const invitationRef = doc(db, 'invitations', invitationId);
+                const invitationSnap = await getDoc(invitationRef);
+                
+                if (invitationSnap.exists()) {
+                    const invitation = invitationSnap.data();
+                    
+                    result.innerHTML = `
+                        <p class="success">✅ Invitation found!</p>
+                        <h3>Invitation Details:</h3>
+                        <pre>${JSON.stringify(invitation, null, 2)}</pre>
+                        <h3>Email Analysis:</h3>
+                        <p><strong>Email in invitation:</strong> ${invitation.email}</p>
+                        <p><strong>Your current email:</strong> ${currentUser?.email || 'Not signed in'}</p>
+                        <p><strong>Status:</strong> ${invitation.status}</p>
+                        <p><strong>Team ID:</strong> ${invitation.teamId}</p>
+                        <p><strong>Team Name:</strong> ${invitation.teamName}</p>
+                        ${currentUser && invitation.email !== currentUser.email ? 
+                            '<p class="error"><strong>❌ EMAIL MISMATCH!</strong> The invitation was sent to a different email.</p>' : 
+                            '<p class="success"><strong>✅ Email matches!</strong></p>'
+                        }
+                    `;
+                } else {
+                    result.innerHTML = '<p class="error">❌ Invitation not found</p>';
+                }
+                
+            } catch (error) {
+                document.getElementById('specific-result').innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                console.error('Error checking invitation:', error);
+            }
+        };
+
+        // Add team manually
+        window.addTeamManually = async function() {
+            try {
+                if (!currentUser && auth.currentUser) {
+                    currentUser = auth.currentUser;
+                }
+                
+                if (!currentUser) {
+                    document.getElementById('fix-result').innerHTML = '<p class="warning">⚠️ Please sign in first</p>';
+                    return;
+                }
+                
+                const teamId = document.getElementById('team-id').value.trim();
+                if (!teamId) {
+                    document.getElementById('fix-result').innerHTML = '<p class="warning">⚠️ Please enter a team ID</p>';
+                    return;
+                }
+                
+                const result = document.getElementById('fix-result');
+                result.innerHTML = '<p>Adding team manually...</p>';
+                
+                // Verify team exists
+                const teamRef = doc(db, 'teams', teamId);
+                const teamSnap = await getDoc(teamRef);
+                
+                if (!teamSnap.exists()) {
+                    result.innerHTML = '<p class="error">❌ Team not found with that ID</p>';
+                    return;
+                }
+                
+                const teamData = teamSnap.data();
+                
+                // Add team to user profile
+                const userRef = doc(db, 'users', currentUser.uid);
+                const userSnap = await getDoc(userRef);
+                
+                if (userSnap.exists()) {
+                    const userData = userSnap.data();
+                    const currentTeams = userData.teams || [];
+                    
+                    if (currentTeams.includes(teamId)) {
+                        result.innerHTML = '<p class="warning">⚠️ Team is already in your profile</p>';
+                        return;
+                    }
+                    
+                    const updatedTeams = [...currentTeams, teamId];
+                    
+                    await updateDoc(userRef, {
+                        teams: updatedTeams,
+                        lastUpdated: new Date()
+                    });
+                    
+                    result.innerHTML = `
+                        <p class="success">✅ Team added successfully!</p>
+                        <p><strong>Team:</strong> ${teamData.name}</p>
+                        <p><strong>Team ID:</strong> ${teamId}</p>
+                        <p><strong>Total teams in profile:</strong> ${updatedTeams.length}</p>
+                        <p class="info">Now go back to your dashboard - the team should appear!</p>
+                    `;
+                    
+                    console.log('✅ Team added manually:', teamId);
+                } else {
+                    // Create user document
+                    await setDoc(userRef, {
+                        uid: currentUser.uid,
+                        email: currentUser.email,
+                        teams: [teamId],
+                        createdAt: new Date(),
+                        lastUpdated: new Date()
+                    });
+                    
+                    result.innerHTML = `
+                        <p class="success">✅ User document created with team!</p>
+                        <p><strong>Team:</strong> ${teamData.name}</p>
+                        <p><strong>Team ID:</strong> ${teamId}</p>
+                        <p class="info">Now go back to your dashboard - the team should appear!</p>
+                    `;
+                    
+                    console.log('✅ User document created with team:', teamId);
+                }
+                
+                // Clear input
+                document.getElementById('team-id').value = '';
+                
+            } catch (error) {
+                document.getElementById('fix-result').innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                console.error('Error adding team:', error);
+            }
+        };
+
+        // Auto-sign in if already authenticated
+        auth.onAuthStateChanged((user) => {
+            if (user && !currentUser) {
+                currentUser = user;
+                console.log('Auto-detected signed in user:', user.email);
+            }
+        });
+    </script>
+</body>
+</html>

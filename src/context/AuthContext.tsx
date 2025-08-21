@@ -38,7 +38,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             email: firebaseUser.email,
             displayName: firebaseUser.displayName || "",
             role: "member",
-            joinedTeams: []
+            teams: []
           });
           setRole("member");
         }

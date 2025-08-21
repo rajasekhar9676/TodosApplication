@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Complete Invitation Flow Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 1000px; margin: 0 auto; padding: 20px; }
+        .section { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }
+        .success { color: green; }
+        .error { color: red; }
+        .warning { color: orange; }
+        .info { color: blue; }
+        button { padding: 10px 20px; margin: 5px; border: none; border-radius: 5px; cursor: pointer; }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-warning { background: #ffc107; color: black; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn-info { background: #17a2b8; color: white; }
+        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; white-space: pre-wrap; }
+        .log { background: #000; color: #0f0; padding: 15px; border-radius: 5px; max-height: 300px; overflow-y: auto; font-family: monospace; }
+        input, select { padding: 8px; margin: 5px; border: 1px solid #ddd; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Complete Invitation Flow Test</h1>
+    
+    <div class="section">
+        <h2>🔐 1. Authentication</h2>
+        <button onclick="signIn()" class="btn-primary">Sign In with Google</button>
+        <button onclick="checkAuthStatus()" class="btn-info">Check Auth Status</button>
+        <div id="auth-result"></div>
+    </div>
+    
+    <div class="section">
+        <h2>🏗️ 2. Create Test Team</h2>
+        <input type="text" id="team-name" placeholder="Team Name" value="Test Team" style="width: 200px;">
+        <button onclick="createTestTeam()" class="btn-success">Create Test Team</button>
+        <div id="team-result"></div>
+    </div>
+    
+    <div class="section">
+        <h2>📧 3. Create Test Invitation</h2>
+        <input type="email" id="invite-email" placeholder="Email to invite" value="test@example.com" style="width: 250px;">
+        <select id="invite-role">
+            <option value="member">Member</option>
+            <option value="admin">Admin</option>
+        </select>
+        <button onclick="createTestInvitation()" class="btn-warning">Create Invitation</button>
+        <div id="invitation-result"></div>
+    </div>
+    
+    <div class="section">
+        <h2>✅ 4. Accept Invitation (Simulate)</h2>
+        <button onclick="simulateAcceptInvitation()" class="btn-success">Simulate Accept Invitation</button>
+        <button onclick="checkUserTeams()" class="btn-info">Check User Teams</button>
+        <div id="accept-result"></div>
+    </div>
+    
+    <div class="section">
+        <h2>🔍 5. Debug Information</h2>
+        <button onclick="showAllData()" class="btn-info">Show All Data</button>
+        <button onclick="checkInvitationData()" class="btn-warning">Check Invitation Data</button>
+        <button onclick="checkTeamData()" class="btn-success">Check Team Data</button>
+        <button onclick="clearLogs()" class="btn-danger">Clear Logs</button>
+        <div id="debug-result"></div>
+        <div class="log" id="debug-log"></div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-app.js';
+        import { getFirestore, doc, getDoc, updateDoc, setDoc, serverTimestamp, onSnapshot, collection, addDoc } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore.js';
+        import { getAuth, signInWithPopup, GoogleAuthProvider } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-auth.js';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBGjoRRDjXLsmX-hxdQEKez4CxHkIbCcWU",
+            authDomain: "steam-outlet-425507-t1.firebaseapp.com",
+            projectId: "steam-outlet-425507-t1",
+            storageBucket: "steam-outlet-425507-t1.firebasestorage.app",
+            messagingSenderId: "925599253452",
+            appId: "1:925599253452:web:d4abc6968b07bb95131369",
+            measurementId: "G-3YPK4FWRH9"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+        const provider = new GoogleAuthProvider();
+
+        let currentUser = null;
+        let testTeamId = null;
+        let testInvitationId = null;
+
+        // Logging function
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('debug-log');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `[${timestamp}] ${message}`;
+            logDiv.innerHTML += logEntry + '\n';
+            logDiv.scrollTop = logDiv.scrollTop + 1000;
+            console.log(message);
+        }
+
+        // Sign in
+        window.signIn = async function() {
+            try {
+                const result = document.getElementById('auth-result');
+                result.innerHTML = '<p>Signing in...</p>';
+                
+                const authResult = await signInWithPopup(auth, provider);
+                currentUser = authResult.user;
+                
+                result.innerHTML = `
+                    <p class="success">✅ Signed in successfully!</p>
+                    <p><strong>User ID:</strong> ${currentUser.uid}</p>
+                    <p><strong>Email:</strong> ${currentUser.email}</p>
+                    <p><strong>Display Name:</strong> ${currentUser.displayName || 'None'}</p>
+                `;
+                
+                log(`✅ Signed in as: ${currentUser.email} (${currentUser.uid})`);
+                
+            } catch (error) {
+                document.getElementById('auth-result').innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                log(`❌ Sign in error: ${error.message}`);
+            }
+        };
+
+        // Check auth status
+        window.checkAuthStatus = function() {
+            const result = document.getElementById('auth-result');
+            if (auth.currentUser) {
+                currentUser = auth.currentUser;
+                result.innerHTML = `
+                    <p class="success">✅ Already signed in!</p>
+                    <p><strong>User ID:</strong> ${currentUser.uid}</p>
+                    <p><strong>Email:</strong> ${currentUser.email}</p>
+                `;
+                log(`✅ Already signed in as: ${currentUser.email}`);
+            } else {
+                result.innerHTML = '<p class="warning">⚠️ Not signed in</p>';
+                log('⚠️ Not signed in');
+            }
+        };
+
+        // Create test team
+        window.createTestTeam = async function() {
+            try {
+                if (!currentUser && auth.currentUser) {
+                    currentUser = auth.currentUser;
+                }
+                
+                if (!currentUser) {
+                    document.getElementById('team-result').innerHTML = '<p class="warning">⚠️ Please sign in first</p>';
+                    return;
+                }
+                
+                const teamName = document.getElementById('team-name').value.trim();
+                if (!teamName) {
+                    document.getElementById('team-result').innerHTML = '<p class="warning">⚠️ Please enter a team name</p>';
+                    return;
+                }
+                
+                const result = document.getElementById('team-result');
+                result.innerHTML = '<p>Creating test team...</p>';
+                
+                const teamData = {
+                    name: teamName,
+                    description: 'Test team for invitation flow',
+                    createdBy: currentUser.uid,
+                    members: [currentUser.uid],
+                    createdAt: serverTimestamp(),
+                    lastUpdated: serverTimestamp()
+                };
+                
+                const teamRef = await addDoc(collection(db, 'teams'), teamData);
+                testTeamId = teamRef.id;
+                
+                result.innerHTML = `
+                    <p class="success">✅ Test team created successfully!</p>
+                    <p><strong>Team ID:</strong> ${testTeamId}</p>
+                    <p><strong>Team Name:</strong> ${teamName}</p>
+                    <p><strong>Created By:</strong> ${currentUser.email}</p>
+                `;
+                
+                log(`✅ Test team created: ${teamName} (${testTeamId})`);
+                
+            } catch (error) {
+                document.getElementById('team-result').innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                log(`❌ Error creating team: ${error.message}`);
+            }
+        };
+
+        // Create test invitation
+        window.createTestInvitation = async function() {
+            try {
+                if (!testTeamId) {
+                    document.getElementById('invitation-result').innerHTML = '<p class="warning">⚠️ Please create a team first</p>';
+                    return;
+                }
+                
+                const inviteEmail = document.getElementById('invite-email').value.trim();
+                const inviteRole = document.getElementById('invite-role').value;
+                
+                if (!inviteEmail) {
+                    document.getElementById('invitation-result').innerHTML = '<p class="warning">⚠️ Please enter an email</p>';
+                    return;
+                }
+                
+                const result = document.getElementById('invitation-result');
+                result.innerHTML = '<p>Creating test invitation...</p>';
+                
+                const invitationData = {
+                    teamId: testTeamId,
+                    teamName: document.getElementById('team-name').value,
+                    email: inviteEmail,
+                    role: inviteRole,
+                    status: 'pending',
+                    invitedBy: currentUser.uid,
+                    invitedByName: currentUser.displayName || currentUser.email,
+                    createdAt: serverTimestamp(),
+                    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
+                };
+                
+                const invitationRef = await addDoc(collection(db, 'invitations'), invitationData);
+                testInvitationId = invitationRef.id;
+                
+                result.innerHTML = `
+                    <p class="success">✅ Test invitation created successfully!</p>
+                    <p><strong>Invitation ID:</strong> ${testInvitationId}</p>
+                    <p><strong>Team ID:</strong> ${testTeamId}</p>
+                    <p><strong>Email:</strong> ${inviteEmail}</p>
+                    <p><strong>Role:</strong> ${inviteRole}</p>
+                `;
+                
+                log(`✅ Test invitation created: ${inviteEmail} for team ${testTeamId} (${testInvitationId})`);
+                
+            } catch (error) {
+                document.getElementById('invitation-result').innerHTML = `<p class="error">❌ Error: ${error.message}</p>';
+                log(`❌ Error creating invitation: ${error.message}`);
+            }
+        };
+
+        // Simulate accepting invitation
+        window.simulateAcceptInvitation = async function() {
+            try {
+                if (!testInvitationId) {
+                    document.getElementById('accept-result').innerHTML = '<p class="warning">⚠️ Please create an invitation first</p>';
+                    return;
+                }
+                
+                if (!currentUser && auth.currentUser) {
+                    currentUser = auth.currentUser;
+                }
+                
+                if (!currentUser) {
+                    document.getElementById('accept-result').innerHTML = '<p class="warning">⚠️ Please sign in first</p>';
+                    return;
+                }
+                
+                const result = document.getElementById('accept-result');
+                result.innerHTML = '<p>Simulating invitation acceptance...</p>';
+                
+                log(`🎯 Starting invitation acceptance simulation for: ${testInvitationId}`);
+                
+                // 1. Get invitation details
+                const invitationRef = doc(db, 'invitations', testInvitationId);
+                const invitationSnap = await getDoc(invitationRef);
+                
+                if (!invitationSnap.exists()) {
+                    throw new Error('Invitation not found');
+                }
+                
+                const invitation = invitationSnap.data();
+                log(`🎯 Invitation data: ${JSON.stringify(invitation, null, 2)}`);
+                
+                // 2. Update invitation status
+                await updateDoc(invitationRef, { 
+                    status: 'accepted',
+                    acceptedAt: serverTimestamp(),
+                    acceptedBy: currentUser.uid
+                });
+                log(`✅ Invitation status updated to accepted`);
+                
+                // 3. Add user to team
+                const teamRef = doc(db, 'teams', invitation.teamId);
+                const teamSnap = await getDoc(teamRef);
+                
+                if (teamSnap.exists()) {
+                    const teamData = teamSnap.data();
+                    const currentMembers = teamData.members || [];
+                    
+                    const isAlreadyMember = currentMembers.some((member: any) => member.uid === currentUser.uid);
+                    
+                    if (!isAlreadyMember) {
+                        const newMember = {
+                            uid: currentUser.uid,
+                            role: invitation.role,
+                            email: invitation.email,
+                            displayName: invitation.invitedByName,
+                            joinedAt: new Date(),
+                            invitedBy: invitation.invitedBy
+                        };
+                        
+                        await updateDoc(teamRef, {
+                            members: [...currentMembers, newMember]
+                        });
+                        log(`✅ User added to team successfully`);
+                    } else {
+                        log(`ℹ️ User is already a team member`);
+                    }
+                }
+                
+                // 4. Add team to user's teams array
+                const userRef = doc(db, 'users', currentUser.uid);
+                const userSnap = await getDoc(userRef);
+                
+                if (userSnap.exists()) {
+                    const userData = userSnap.data();
+                    const updatedTeams = [...(userData?.teams || []), invitation.teamId];
+                    
+                    await updateDoc(userRef, { 
+                        teams: updatedTeams,
+                        lastUpdated: serverTimestamp()
+                    });
+                    log(`✅ Team added to user profile. Updated teams: ${JSON.stringify(updatedTeams)}`);
+                } else {
+                    // Create user document if it doesn't exist
+                    await setDoc(userRef, {
+                        uid: currentUser.uid,
+                        email: invitation.email,
+                        teams: [invitation.teamId],
+                        createdAt: serverTimestamp(),
+                        lastUpdated: serverTimestamp()
+                    });
+                    log(`✅ User document created with team: ${invitation.teamId}`);
+                }
+                
+                result.innerHTML = `
+                    <p class="success">✅ Invitation acceptance simulated successfully!</p>
+                    <p><strong>Team ID added:</strong> ${invitation.teamId}</p>
+                    <p><strong>User ID:</strong> ${currentUser.uid}</p>
+                `;
+                
+                log(`✅ Invitation acceptance simulation completed successfully`);
+                
+            } catch (error) {
+                document.getElementById('accept-result').innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                log(`❌ Error simulating invitation acceptance: ${error.message}`);
+            }
+        };
+
+        // Check user teams
+        window.checkUserTeams = async function() {
+            try {
+                if (!currentUser && auth.currentUser) {
+                    currentUser = auth.currentUser;
+                }
+                
+                if (!currentUser) {
+                    document.getElementById('accept-result').innerHTML = '<p class="warning">⚠️ Please sign in first</p>';
+                    return;
+                }
+                
+                const result = document.getElementById('accept-result');
+                result.innerHTML = '<p>Checking user teams...</p>';
+                
+                const userRef = doc(db, 'users', currentUser.uid);
+                const userSnap = await getDoc(userRef);
+                
+                if (userSnap.exists()) {
+                    const userData = userSnap.data();
+                    
+                    result.innerHTML = `
+                        <p class="success">✅ User document found!</p>
+                        <h3>User Data:</h3>
+                        <pre>${JSON.stringify(userData, null, 2)}</pre>
+                        <h3>Teams Analysis:</h3>
+                        <p><strong>teams field:</strong> ${userData.teams ? `Array with ${userData.teams.length} items: [${userData.teams.join(', ')}]` : 'undefined/missing'}</p>
+                        <p><strong>joinedTeams field:</strong> ${userData.joinedTeams ? `Array with ${userData.joinedTeams.length} items: [${userData.joinedTeams.join(', ')}]` : 'undefined/missing'}</p>
+                    `;
+                    
+                    log(`📋 User teams check: teams=${userData.teams?.length || 0}, joinedTeams=${userData.joinedTeams?.length || 0}`);
+                } else {
+                    result.innerHTML = '<p class="error">❌ User document not found</p>';
+                    log(`❌ User document not found for: ${currentUser.uid}`);
+                }
+                
+            } catch (error) {
+                document.getElementById('accept-result').innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                log(`❌ Error checking user teams: ${error.message}`);
+            }
+        };
+
+        // Show all data
+        window.showAllData = async function() {
+            try {
+                const result = document.getElementById('debug-result');
+                result.innerHTML = '<p>Fetching all data...</p>';
+                
+                let allData = {};
+                
+                // Get user data
+                if (currentUser) {
+                    const userRef = doc(db, 'users', currentUser.uid);
+                    const userSnap = await getDoc(userRef);
+                    if (userSnap.exists()) {
+                        allData.user = userSnap.data();
+                    }
+                }
+                
+                // Get team data
+                if (testTeamId) {
+                    const teamRef = doc(db, 'teams', testTeamId);
+                    const teamSnap = await getDoc(teamRef);
+                    if (teamSnap.exists()) {
+                        allData.team = teamSnap.data();
+                    }
+                }
+                
+                // Get invitation data
+                if (testInvitationId) {
+                    const invitationRef = doc(db, 'invitations', testInvitationId);
+                    const invitationSnap = await getDoc(invitationRef);
+                    if (invitationSnap.exists()) {
+                        allData.invitation = invitationSnap.data();
+                    }
+                }
+                
+                result.innerHTML = `
+                    <h3>All Data Summary:</h3>
+                    <pre>${JSON.stringify(allData, null, 2)}</pre>
+                `;
+                
+                log(`📊 All data fetched: user=${!!allData.user}, team=${!!allData.team}, invitation=${!!allData.invitation}`);
+                
+            } catch (error) {
+                document.getElementById('debug-result').innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                log(`❌ Error fetching all data: ${error.message}`);
+            }
+        };
+
+        // Check invitation data
+        window.checkInvitationData = async function() {
+            try {
+                if (!testInvitationId) {
+                    document.getElementById('debug-result').innerHTML = '<p class="warning">⚠️ No invitation ID available</p>';
+                    return;
+                }
+                
+                const result = document.getElementById('debug-result');
+                result.innerHTML = '<p>Checking invitation data...</p>';
+                
+                const invitationRef = doc(db, 'invitations', testInvitationId);
+                const invitationSnap = await getDoc(invitationRef);
+                
+                if (invitationSnap.exists()) {
+                    const invitation = invitationSnap.data();
+                    
+                    result.innerHTML = `
+                        <h3>Invitation Data:</h3>
+                        <pre>${JSON.stringify(invitation, null, 2)}</pre>
+                        <h3>Validation:</h3>
+                        <p><strong>teamId:</strong> ${invitation.teamId || 'MISSING'}</p>
+                        <p><strong>teamName:</strong> ${invitation.teamName || 'MISSING'}</p>
+                        <p><strong>email:</strong> ${invitation.email || 'MISSING'}</p>
+                        <p><strong>status:</strong> ${invitation.status || 'MISSING'}</p>
+                        <p><strong>role:</strong> ${invitation.role || 'MISSING'}</p>
+                    `;
+                    
+                    log(`📧 Invitation data check: ${invitation.teamId ? 'VALID' : 'INVALID'} teamId`);
+                } else {
+                    result.innerHTML = '<p class="error">❌ Invitation not found</p>';
+                    log(`❌ Invitation not found: ${testInvitationId}`);
+                }
+                
+            } catch (error) {
+                document.getElementById('debug-result').innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                log(`❌ Error checking invitation: ${error.message}`);
+            }
+        };
+
+        // Check team data
+        window.checkTeamData = async function() {
+            try {
+                if (!testTeamId) {
+                    document.getElementById('debug-result').innerHTML = '<p class="warning">⚠️ No team ID available</p>';
+                    return;
+                }
+                
+                const result = document.getElementById('debug-result');
+                result.innerHTML = '<p>Checking team data...</p>';
+                
+                const teamRef = doc(db, 'teams', testTeamId);
+                const teamSnap = await getDoc(teamRef);
+                
+                if (teamSnap.exists()) {
+                    const team = teamSnap.data();
+                    
+                    result.innerHTML = `
+                        <h3>Team Data:</h3>
+                        <pre>${JSON.stringify(team, null, 2)}</pre>
+                        <h3>Members:</h3>
+                        <p><strong>Total members:</strong> ${team.members?.length || 0}</p>
+                        <p><strong>Members:</strong> ${team.members ? team.members.map(m => m.uid || m).join(', ') : 'None'}</p>
+                    `;
+                    
+                    log(`🏗️ Team data check: ${team.members?.length || 0} members`);
+                } else {
+                    result.innerHTML = '<p class="error">❌ Team not found</p>';
+                    log(`❌ Team not found: ${testTeamId}`);
+                }
+                
+            } catch (error) {
+                document.getElementById('debug-result').innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                log(`❌ Error checking team: ${error.message}`);
+            }
+        };
+
+        // Clear logs
+        window.clearLogs = function() {
+            document.getElementById('debug-log').innerHTML = '';
+            log('🧹 Logs cleared');
+        };
+
+        // Auto-sign in if already authenticated
+        auth.onAuthStateChanged((user) => {
+            if (user && !currentUser) {
+                currentUser = user;
+                log(`🔄 Auto-detected signed in user: ${user.email}`);
+            }
+        });
+
+        // Initialize
+        log('🚀 Complete invitation flow test page initialized. Sign in to begin testing.');
+    </script>
+</body>
+</html>

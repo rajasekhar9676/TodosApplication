@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { db } from '../config';
-import { doc, getDoc, collection, query, orderBy, limit, addDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, collection, query, orderBy, limit, addDoc, serverTimestamp, onSnapshot, setDoc, updateDoc, getDocs, where } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 
 interface Team {
@@ -32,9 +32,203 @@ interface VoiceNote {
   userId: string;
 }
 
+// Helper function to create user document
+const createUserDocument = async (userId: string) => {
+  try {
+    const userRef = doc(db, 'users', userId);
+    const userData = {
+      uid: userId,
+      teams: [],
+      createdAt: serverTimestamp(),
+      lastUpdated: serverTimestamp()
+    };
+    await setDoc(userRef, userData);
+    console.log('✅ Dashboard: User document created');
+    return userData;
+  } catch (error) {
+    console.error('❌ Dashboard: Error creating user document:', error);
+    throw error;
+  }
+};
+
+// Helper function to fix user document
+const fixUserDocument = async (userId: string) => {
+  try {
+    const userRef = doc(db, 'users', userId);
+    const updates = {
+      teams: [],
+      lastUpdated: serverTimestamp()
+    };
+    await updateDoc(userRef, updates);
+    console.log('✅ Dashboard: User document fixed');
+    return updates;
+  } catch (error) {
+    console.error('❌ Dashboard: Error fixing user document:', error);
+    throw error;
+  }
+};
+
+// Helper function to migrate user document from joinedTeams to teams
+const migrateUserDocument = async (userId: string) => {
+  try {
+    const userRef = doc(db, 'users', userId);
+    const userSnap = await getDoc(userRef);
+    
+    if (userSnap.exists()) {
+      const userData = userSnap.data();
+      const joinedTeams = userData?.joinedTeams || [];
+      const teams = userData?.teams || [];
+      
+      if (joinedTeams.length > 0 && teams.length === 0) {
+        console.log('🔄 Dashboard: Migrating user document...');
+        await updateDoc(userRef, {
+          teams: joinedTeams,
+          joinedTeams: [], // Clear old field
+          lastUpdated: serverTimestamp()
+        });
+        console.log('✅ Dashboard: User document migrated successfully');
+        return true;
+      } else {
+        console.log('ℹ️ Dashboard: No migration needed');
+        return false;
+      }
+    }
+    return false;
+  } catch (error) {
+    console.error('❌ Dashboard: Error migrating user document:', error);
+    throw error;
+  }
+};
+
+// Debug function to check invitation status
+const debugInvitationStatus = async (userId: string) => {
+  try {
+    console.log('🔍 Dashboard: Debugging invitation status for user:', userId);
+    
+    // Check all invitations for this user's email
+    const userRef = doc(db, 'users', userId);
+    const userSnap = await getDoc(userRef);
+    
+    if (userSnap.exists()) {
+      const userData = userSnap.data();
+      console.log('🔍 Dashboard: User email:', userData.email);
+      
+      // Get all invitations for this email
+      const invitationsQuery = query(
+        collection(db, 'invitations'),
+        where('email', '==', userData.email)
+      );
+      
+      const invitationsSnap = await getDocs(invitationsQuery);
+      console.log('🔍 Dashboard: Found invitations:', invitationsSnap.size);
+      
+      if (!invitationsSnap.empty) {
+        invitationsSnap.forEach(doc => {
+          const invitation = doc.data();
+          console.log('🔍 Dashboard: Invitation:', {
+            id: doc.id,
+            teamName: invitation.teamName,
+            status: invitation.status,
+            email: invitation.email,
+            teamId: invitation.teamId
+          });
+        });
+      }
+    }
+  } catch (error) {
+    console.error('❌ Dashboard: Error debugging invitation status:', error);
+  }
+};
+
+// Function to clear test team ID
+const clearTestTeam = async (userId: string) => {
+  try {
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, {
+      teams: [],
+      lastUpdated: serverTimestamp()
+    });
+    console.log('✅ Dashboard: Cleared test team ID from profile');
+    window.location.reload();
+  } catch (error) {
+    console.error('❌ Dashboard: Error clearing test team:', error);
+  }
+};
+
+// Function to manually test accepting an invitation
+const testAcceptInvitation = async (userId: string) => {
+  try {
+    console.log('🧪 Dashboard: Testing invitation acceptance...');
+    
+    // Get the first pending invitation
+    const invitationsQuery = query(
+      collection(db, 'invitations'),
+      where('email', '==', 'digital@educationtoday.co'),
+      where('status', '==', 'pending')
+    );
+    
+    const invitationsSnap = await getDocs(invitationsQuery);
+    
+    if (!invitationsSnap.empty) {
+      const firstInvitation = invitationsSnap.docs[0];
+      const invitationData = firstInvitation.data();
+      
+      console.log('🧪 Dashboard: Testing with invitation:', {
+        id: firstInvitation.id,
+        teamName: invitationData.teamName,
+        teamId: invitationData.teamId,
+        email: invitationData.email
+      });
+      
+      // Test the acceptance process step by step
+      const invitationRef = doc(db, 'invitations', firstInvitation.id);
+      
+      // Step 1: Update invitation status
+      console.log('🧪 Dashboard: Step 1 - Updating invitation status...');
+      await updateDoc(invitationRef, {
+        status: 'accepted',
+        acceptedAt: new Date(),
+        acceptedBy: userId
+      });
+      console.log('✅ Dashboard: Invitation status updated to accepted');
+      
+      // Step 2: Add team to user profile
+      console.log('🧪 Dashboard: Step 2 - Adding team to user profile...');
+      const userRef = doc(db, 'users', userId);
+      const userSnap = await getDoc(userRef);
+      
+      if (userSnap.exists()) {
+        const userData = userSnap.data();
+        const currentTeams = userData?.teams || [];
+        const updatedTeams = [...currentTeams, invitationData.teamId];
+        
+        await updateDoc(userRef, {
+          teams: updatedTeams,
+          lastUpdated: serverTimestamp()
+        });
+        console.log('✅ Dashboard: Team added to user profile');
+        console.log('🧪 Dashboard: Teams array updated to:', updatedTeams);
+        
+        // Refresh the page to see the changes
+        window.location.reload();
+      }
+    } else {
+      console.log('❌ Dashboard: No pending invitations found');
+    }
+  } catch (error) {
+    console.error('❌ Dashboard: Error testing invitation acceptance:', error);
+  }
+};
+
 const Dashboard: React.FC = () => {
   const { user } = useAuth();
   const [teams, setTeams] = useState<Team[]>([]);
+  
+  // Debug logging for teams state changes
+  useEffect(() => {
+    console.log('📋 Dashboard: Teams state changed to:', teams);
+    console.log('📋 Dashboard: Teams length:', teams.length);
+  }, [teams]);
   const [recentTasks, setRecentTasks] = useState<Task[]>([]);
   const [voiceNotes, setVoiceNotes] = useState<VoiceNote[]>([]);
   const [stats, setStats] = useState({
@@ -51,19 +245,68 @@ const Dashboard: React.FC = () => {
 
     const fetchDashboardData = async () => {
       try {
+        console.log('🔄 Dashboard: Fetching user data for:', user.uid);
+        
         // Fetch user's teams
         const userRef = doc(db, 'users', user.uid);
         const userSnap = await getDoc(userRef);
-        const userData = userSnap.data();
+        
+        if (!userSnap.exists()) {
+          console.log('❌ Dashboard: User document not found, creating...');
+          await createUserDocument(user.uid);
+          // Retry after creating document
+          const newUserSnap = await getDoc(userRef);
+          const userData = newUserSnap.data();
+          console.log('✅ Dashboard: Created user document:', userData);
+        }
+        
+        let userData = userSnap.data();
 
-        if (userData?.teams && userData.teams.length > 0) {
-          const teamPromises = userData.teams.map(async (teamId: string) => {
+        console.log('📋 Dashboard: User document exists:', userSnap.exists());
+        console.log('📋 Dashboard: User data:', userData);
+        console.log('📋 Dashboard: User teams array:', userData?.teams);
+        console.log('📋 Dashboard: User joinedTeams array:', userData?.joinedTeams);
+        
+        // Check if user document needs fixing
+        if (userData && !userData.teams && !userData.joinedTeams) {
+          console.log('⚠️ Dashboard: User document missing teams fields, fixing...');
+          await fixUserDocument(user.uid);
+        }
+        
+        // Check if user document needs migration from joinedTeams to teams
+        if (userData && userData.joinedTeams && userData.joinedTeams.length > 0 && (!userData.teams || userData.teams.length === 0)) {
+          console.log('🔄 Dashboard: User document needs migration from joinedTeams to teams...');
+          await migrateUserDocument(user.uid);
+          // Refresh user data after migration
+          const updatedUserSnap = await getDoc(userRef);
+          const updatedUserData = updatedUserSnap.data();
+          userData = updatedUserData;
+        }
+
+        // Handle both 'teams' and 'joinedTeams' field names for compatibility
+        const userTeams = userData?.teams || userData?.joinedTeams || [];
+        
+        if (userTeams.length > 0) {
+          console.log('📋 Dashboard: Fetching teams data for:', userTeams.length, 'teams');
+          console.log('📋 Dashboard: Teams field used:', userData?.teams ? 'teams' : 'joinedTeams');
+          
+          const teamPromises = userTeams.map(async (teamId: string) => {
             const teamRef = doc(db, 'teams', teamId);
             const teamSnap = await getDoc(teamRef);
-            return { id: teamId, ...teamSnap.data() } as Team;
+            if (teamSnap.exists()) {
+              return { id: teamId, ...teamSnap.data() } as Team;
+            } else {
+              console.warn('⚠️ Dashboard: Team not found:', teamId);
+              return null;
+            }
           });
-          const teamsData = await Promise.all(teamPromises);
+          
+          const teamsData = (await Promise.all(teamPromises)).filter(Boolean) as Team[];
+          console.log('📋 Dashboard: Teams data loaded:', teamsData.length, 'teams');
+          console.log('📋 Dashboard: Teams data details:', teamsData);
+          
           setTeams(teamsData);
+          console.log('📋 Dashboard: setTeams called with:', teamsData);
           setStats(prev => ({ ...prev, teamsCount: teamsData.length }));
 
           // Set up real-time listeners for user's tasks only
@@ -142,7 +385,80 @@ const Dashboard: React.FC = () => {
     };
 
     fetchDashboardData();
+
+    // Set up real-time listener for user's teams array
+    if (user) {
+      const userRef = doc(db, 'users', user.uid);
+      const unsubscribeUser = onSnapshot(userRef, (doc) => {
+        if (doc.exists()) {
+          const userData = doc.data();
+          console.log('🔄 Dashboard: User data updated in real-time:', userData);
+          
+          // If teams array changed, refresh dashboard data (handle both field names)
+          const userTeams = userData?.teams || userData?.joinedTeams || [];
+          if (userTeams.length !== teams.length) {
+            console.log('🔄 Dashboard: Teams array changed, refreshing data...');
+            console.log('🔄 Dashboard: New teams count:', userTeams.length, 'vs current:', teams.length);
+            fetchDashboardData();
+          }
+        }
+      }, (error) => {
+        console.error('❌ Dashboard: Error listening to user updates:', error);
+      });
+
+      return () => unsubscribeUser();
+    }
   }, [user]);
+
+  // Add a refresh function for manual updates
+  const refreshDashboard = async () => {
+    console.log('🔄 Dashboard: Manual refresh requested');
+    setLoading(true);
+    setTeams([]);
+    setAllTasks([]);
+    
+    // Force re-fetch by updating user dependency
+    if (user) {
+      const userRef = doc(db, 'users', user.uid);
+      await getDoc(userRef); // This will trigger the useEffect
+    }
+    
+    setLoading(false);
+  };
+
+  // Manual fix function for debugging
+  const manualFixUserDocument = async () => {
+    if (!user) return;
+    
+    console.log('🔧 Dashboard: Manual fix requested');
+    setLoading(true);
+    
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      const userSnap = await getDoc(userRef);
+      
+      if (!userSnap.exists()) {
+        await createUserDocument(user.uid);
+        console.log('✅ Dashboard: Created missing user document');
+      } else {
+        const userData = userSnap.data();
+        if (!userData.teams) {
+          await updateDoc(userRef, {
+            teams: userData.joinedTeams || [],
+            lastUpdated: serverTimestamp()
+          });
+          console.log('✅ Dashboard: Added teams field to user document');
+        }
+      }
+      
+      // Refresh dashboard
+      await refreshDashboard();
+    } catch (error) {
+      console.error('❌ Dashboard: Error fixing user document:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Update stats and recent tasks when allTasks changes
   useEffect(() => {
@@ -377,10 +693,27 @@ const Dashboard: React.FC = () => {
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-gray-200/50 dark:border-slate-700/50">
         <div className="p-6 border-b border-gray-200/50 dark:border-slate-700/50">
           <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">My Teams</h2>
-            <Link to="/teams" className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 text-sm font-semibold transition-colors">
-              View all teams →
-            </Link>
+            <div className="flex items-center space-x-3">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">My Teams</h2>
+              <span className="px-3 py-1 bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded-full text-sm font-medium">
+                {teams.length} team{teams.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={refreshDashboard}
+                disabled={loading}
+                className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
+                title="Refresh teams"
+              >
+                <svg className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+              <Link to="/teams" className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 text-sm font-semibold transition-colors">
+                View all teams →
+              </Link>
+            </div>
           </div>
         </div>
         <div className="p-6">
@@ -393,17 +726,116 @@ const Dashboard: React.FC = () => {
               </div>
               <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">No teams yet</h3>
               <p className="text-gray-600 dark:text-gray-300 mb-6 max-w-md mx-auto">
-                Create your first team to start collaborating with others. Teams help you organize tasks and work together efficiently.
+                Create your first team to start collaborating with others, or wait for team invitations to arrive. Teams help you organize tasks and work together efficiently.
               </p>
-              <Link
-                to="/teams"
-                className="inline-flex items-center bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-200 shadow-lg hover:shadow-xl"
-              >
-                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
-                Create Your First Team
-              </Link>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                                  <button
+                    onClick={refreshDashboard}
+                    disabled={loading}
+                    className="inline-flex items-center bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50"
+                  >
+                    <svg className={`w-5 h-5 mr-2 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    {loading ? 'Refreshing...' : 'Refresh Teams'}
+                  </button>
+                  <button
+                    onClick={manualFixUserDocument}
+                    disabled={loading}
+                    className="inline-flex items-center bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50"
+                  >
+                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    Fix User Document
+                  </button>
+                  <button
+                    onClick={() => migrateUserDocument(user?.uid || '')}
+                    disabled={loading}
+                    className="inline-flex items-center bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50"
+                  >
+                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    Migrate Teams Data
+                  </button>
+                  <button
+                    onClick={() => debugInvitationStatus(user?.uid || '')}
+                    disabled={loading}
+                    className="inline-flex items-center bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-700 hover:to-orange-700 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50"
+                  >
+                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5M12 6a3 3 0 110 6 3 3 0 010-6z" />
+                    </svg>
+                    Debug Invitations
+                  </button>
+                  <button
+                    onClick={async () => {
+                      try {
+                        console.log('🔍 Dashboard: Checking all teams in database...');
+                        
+                        // Get all teams
+                        const teamsQuery = query(collection(db, 'teams'));
+                        const teamsSnap = await getDocs(teamsQuery);
+                        
+                        console.log('🔍 Dashboard: Total teams in database:', teamsSnap.size);
+                        
+                        if (!teamsSnap.empty) {
+                          teamsSnap.forEach(doc => {
+                            const team = doc.data();
+                            console.log('🔍 Dashboard: Team:', {
+                              id: doc.id,
+                              name: team.name,
+                              members: team.members?.length || 0,
+                              createdBy: team.createdBy
+                            });
+                          });
+                        } else {
+                          console.log('🔍 Dashboard: No teams found in database');
+                        }
+                      } catch (error) {
+                        console.error('❌ Dashboard: Error checking teams:', error);
+                      }
+                    }}
+                    disabled={loading}
+                    className="inline-flex items-center bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50"
+                  >
+                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                    Check All Teams
+                  </button>
+                  <button
+                    onClick={() => clearTestTeam(user?.uid || '')}
+                    disabled={loading}
+                    className="inline-flex items-center bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50"
+                  >
+                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    Clear Test Team
+                  </button>
+                  <button
+                    onClick={() => testAcceptInvitation(user?.uid || '')}
+                    disabled={loading}
+                    className="inline-flex items-center bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50"
+                  >
+                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                    Test Accept Invitation
+                  </button>
+                <Link
+                  to="/teams"
+                  className="inline-flex items-center bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-200 shadow-lg hover:shadow-xl"
+                >
+                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  Create Your First Team
+                </Link>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

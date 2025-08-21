@@ -44,7 +44,7 @@ const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 const db = getFirestore(app);
 const storage = getStorage(app);
-setLogLevel('debug');
+// setLogLevel('debug'); // Commented out to avoid potential issues
 
 export { auth, provider, db, storage };
 

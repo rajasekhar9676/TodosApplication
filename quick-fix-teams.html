@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Quick Fix Teams</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; }
+        .section { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }
+        .success { color: green; }
+        .error { color: red; }
+        .warning { color: orange; }
+        .info { color: blue; }
+        button { padding: 10px 20px; margin: 5px; border: none; border-radius: 5px; cursor: pointer; }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-warning { background: #ffc107; color: black; }
+        input { padding: 8px; margin: 5px; border: 1px solid #ddd; border-radius: 4px; width: 300px; }
+        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🔧 Quick Fix Teams</h1>
+    
+    <div class="section">
+        <h2>1. Sign In</h2>
+        <button onclick="signIn()" class="btn-primary">Sign In with Google</button>
+        <div id="signin-result"></div>
+    </div>
+    
+    <div class="section">
+        <h2>2. Find Your Team</h2>
+        <button onclick="findUserTeams()" class="btn-success">Find Teams You Should Be In</button>
+        <div id="teams-result"></div>
+    </div>
+    
+    <div class="section">
+        <h2>3. Add Team to Your Profile</h2>
+        <input type="text" id="team-id" placeholder="Enter team ID to add to your profile">
+        <button onclick="addTeamToProfile()" class="btn-warning">Add Team to My Profile</button>
+        <div id="add-result"></div>
+    </div>
+    
+    <div class="section">
+        <h2>4. Check Current Status</h2>
+        <button onclick="checkCurrentStatus()" class="btn-info">Check My Current Teams</button>
+        <div id="status-result"></div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-app.js';
+        import { getFirestore, doc, getDoc, updateDoc, collection, query, where, getDocs } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore.js';
+        import { getAuth, signInWithPopup, GoogleAuthProvider } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-auth.js';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBGjoRRDjXLsmX-hxdQEKez4CxHkIbCcWU",
+            authDomain: "steam-outlet-425507-t1.firebaseapp.com",
+            projectId: "steam-outlet-425507-t1",
+            storageBucket: "steam-outlet-425507-t1.firebasestorage.app",
+            messagingSenderId: "925599253452",
+            appId: "1:925599253452:web:d4abc6968b07bb95131369",
+            measurementId: "G-3YPK4FWRH9"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+        const provider = new GoogleAuthProvider();
+
+        let currentUser = null;
+
+        // Sign in
+        window.signIn = async function() {
+            try {
+                const result = document.getElementById('signin-result');
+                result.innerHTML = '<p>Signing in...</p>';
+                
+                const authResult = await signInWithPopup(auth, provider);
+                currentUser = authResult.user;
+                
+                result.innerHTML = `
+                    <p class="success">✅ Signed in successfully!</p>
+                    <p><strong>User ID:</strong> ${currentUser.uid}</p>
+                    <p><strong>Email:</strong> ${currentUser.email}</p>
+                `;
+                
+                console.log('✅ Signed in as:', currentUser.email);
+                
+            } catch (error) {
+                document.getElementById('signin-result').innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                console.error('Sign in error:', error);
+            }
+        };
+
+        // Find teams user should be in
+        window.findUserTeams = async function() {
+            try {
+                if (!currentUser && auth.currentUser) {
+                    currentUser = auth.currentUser;
+                }
+                
+                if (!currentUser) {
+                    document.getElementById('teams-result').innerHTML = '<p class="warning">⚠️ Please sign in first</p>';
+                    return;
+                }
+                
+                const result = document.getElementById('teams-result');
+                result.innerHTML = '<p>Searching for teams...</p>';
+                
+                // Find teams where user is a member
+                const teamsQuery = query(
+                    collection(db, 'teams'),
+                    where('members', 'array-contains', currentUser.uid)
+                );
+                
+                const teamsSnap = await getDocs(teamsQuery);
+                
+                if (!teamsSnap.empty) {
+                    const teams = [];
+                    teamsSnap.forEach(doc => {
+                        teams.push({ id: doc.id, ...doc.data() });
+                    });
+                    
+                    result.innerHTML = `
+                        <p class="success">✅ Found ${teams.length} team(s) you're a member of:</p>
+                        ${teams.map(team => `
+                            <div style="border: 1px solid #ddd; padding: 10px; margin: 10px 0; border-radius: 5px;">
+                                <p><strong>Team ID:</strong> ${team.id}</p>
+                                <p><strong>Team Name:</strong> ${team.name}</p>
+                                <p><strong>Description:</strong> ${team.description || 'No description'}</p>
+                                <p><strong>Members:</strong> ${team.members?.length || 0}</p>
+                            </div>
+                        `).join('')}
+                    `;
+                    
+                    console.log('Found teams:', teams);
+                } else {
+                    // Check invitations
+                    const invitationsQuery = query(
+                        collection(db, 'invitations'),
+                        where('email', '==', currentUser.email),
+                        where('status', '==', 'pending')
+                    );
+                    
+                    const invitationsSnap = await getDocs(invitationsQuery);
+                    
+                    if (!invitationsSnap.empty) {
+                        const invitations = [];
+                        invitationsSnap.forEach(doc => {
+                            invitations.push({ id: doc.id, ...doc.data() });
+                        });
+                        
+                        result.innerHTML = `
+                            <p class="warning">⚠️ No teams found, but you have ${invitations.length} pending invitation(s):</p>
+                            ${invitations.map(inv => `
+                                <div style="border: 1px solid #ddd; padding: 10px; margin: 10px 0; border-radius: 5px;">
+                                    <p><strong>Invitation ID:</strong> ${inv.id}</p>
+                                    <p><strong>Team ID:</strong> ${inv.teamId}</p>
+                                    <p><strong>Team Name:</strong> ${inv.teamName}</p>
+                                    <p><strong>Role:</strong> ${inv.role}</p>
+                                </div>
+                            `).join('')}
+                        `;
+                        
+                        console.log('Found invitations:', invitations);
+                    } else {
+                        result.innerHTML = `
+                            <p class="warning">⚠️ No teams or invitations found for your email (${currentUser.email})</p>
+                            <p>This means either:</p>
+                            <ul>
+                                <li>You haven't been invited to any teams yet</li>
+                                <li>Your email in the invitation doesn't match your current email</li>
+                                <li>All invitations have expired or been processed</li>
+                            </ul>
+                        `;
+                    }
+                }
+                
+            } catch (error) {
+                document.getElementById('teams-result').innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                console.error('Error finding teams:', error);
+            }
+        };
+
+        // Add team to user profile
+        window.addTeamToProfile = async function() {
+            try {
+                if (!currentUser && auth.currentUser) {
+                    currentUser = auth.currentUser;
+                }
+                
+                if (!currentUser) {
+                    document.getElementById('add-result').innerHTML = '<p class="warning">⚠️ Please sign in first</p>';
+                    return;
+                }
+                
+                const teamId = document.getElementById('team-id').value.trim();
+                if (!teamId) {
+                    document.getElementById('add-result').innerHTML = '<p class="warning">⚠️ Please enter a team ID</p>';
+                    return;
+                }
+                
+                const result = document.getElementById('add-result');
+                result.innerHTML = '<p>Adding team to your profile...</p>';
+                
+                // Verify team exists
+                const teamRef = doc(db, 'teams', teamId);
+                const teamSnap = await getDoc(teamRef);
+                
+                if (!teamSnap.exists()) {
+                    result.innerHTML = '<p class="error">❌ Team not found with that ID</p>';
+                    return;
+                }
+                
+                const teamData = teamSnap.data();
+                
+                // Check if user is actually a member
+                if (!teamData.members || !teamData.members.includes(currentUser.uid)) {
+                    result.innerHTML = `
+                        <p class="warning">⚠️ You are not a member of this team</p>
+                        <p><strong>Team:</strong> ${teamData.name}</p>
+                        <p><strong>Members:</strong> ${teamData.members?.length || 0}</p>
+                    `;
+                    return;
+                }
+                
+                // Add team to user profile
+                const userRef = doc(db, 'users', currentUser.uid);
+                const userSnap = await getDoc(userRef);
+                
+                if (userSnap.exists()) {
+                    const userData = userSnap.data();
+                    const currentTeams = userData.teams || [];
+                    
+                    if (currentTeams.includes(teamId)) {
+                        result.innerHTML = '<p class="warning">⚠️ Team is already in your profile</p>';
+                        return;
+                    }
+                    
+                    const updatedTeams = [...currentTeams, teamId];
+                    
+                    await updateDoc(userRef, {
+                        teams: updatedTeams,
+                        lastUpdated: new Date()
+                    });
+                    
+                    result.innerHTML = `
+                        <p class="success">✅ Team added successfully!</p>
+                        <p><strong>Team:</strong> ${teamData.name}</p>
+                        <p><strong>Team ID:</strong> ${teamId}</p>
+                        <p><strong>Total teams in profile:</strong> ${updatedTeams.length}</p>
+                    `;
+                    
+                    console.log('✅ Team added to profile:', teamId);
+                } else {
+                    // Create user document
+                    await setDoc(userRef, {
+                        uid: currentUser.uid,
+                        email: currentUser.email,
+                        teams: [teamId],
+                        createdAt: new Date(),
+                        lastUpdated: new Date()
+                    });
+                    
+                    result.innerHTML = `
+                        <p class="success">✅ User document created with team!</p>
+                        <p><strong>Team:</strong> ${teamData.name}</p>
+                        <p><strong>Team ID:</strong> ${teamId}</p>
+                    `;
+                    
+                    console.log('✅ User document created with team:', teamId);
+                }
+                
+                // Clear input
+                document.getElementById('team-id').value = '';
+                
+            } catch (error) {
+                document.getElementById('add-result').innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                console.error('Error adding team:', error);
+            }
+        };
+
+        // Check current status
+        window.checkCurrentStatus = async function() {
+            try {
+                if (!currentUser && auth.currentUser) {
+                    currentUser = auth.currentUser;
+                }
+                
+                if (!currentUser) {
+                    document.getElementById('status-result').innerHTML = '<p class="warning">⚠️ Please sign in first</p>';
+                    return;
+                }
+                
+                const result = document.getElementById('status-result');
+                result.innerHTML = '<p>Checking your current status...</p>';
+                
+                const userRef = doc(db, 'users', currentUser.uid);
+                const userSnap = await getDoc(userRef);
+                
+                if (userSnap.exists()) {
+                    const userData = userSnap.data();
+                    
+                    result.innerHTML = `
+                        <p class="success">✅ Your current profile:</p>
+                        <pre>${JSON.stringify(userData, null, 2)}</pre>
+                        <h3>Teams Summary:</h3>
+                        <p><strong>teams field:</strong> ${userData.teams ? `${userData.teams.length} teams: [${userData.teams.join(', ')}]` : 'undefined/missing'}</p>
+                        <p><strong>joinedTeams field:</strong> ${userData.joinedTeams ? `${userData.joinedTeams.length} teams: [${userData.joinedTeams.join(', ')}]` : 'undefined/missing'}</p>
+                    `;
+                } else {
+                    result.innerHTML = '<p class="error">❌ No user document found</p>';
+                }
+                
+            } catch (error) {
+                document.getElementById('status-result').innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                console.error('Error checking status:', error);
+            }
+        };
+
+        // Auto-sign in if already authenticated
+        auth.onAuthStateChanged((user) => {
+            if (user && !currentUser) {
+                currentUser = user;
+                console.log('Auto-detected signed in user:', user.email);
+            }
+        });
+    </script>
+</body>
+</html>

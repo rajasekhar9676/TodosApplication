@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { invitationService } from '../services/invitationService';
 import { useAuth } from '../context/AuthContext';
-import { db } from '../config';
+import { db, auth } from '../config';
 import { doc, getDoc } from 'firebase/firestore';
 
 const InviteAccept: React.FC = () => {
@@ -34,11 +34,34 @@ const InviteAccept: React.FC = () => {
       }
 
       if (!user) {
-        console.error('❌ InviteAccept: User not authenticated');
-        setError('Please log in to accept this invitation');
+        console.log('📧 InviteAccept: User not authenticated, redirecting to login...');
+        // Store the invitation ID in sessionStorage so we can redirect back after login
+        if (invitationId) {
+          sessionStorage.setItem('pendingInvitationId', invitationId);
+        }
+        navigate('/signin', { 
+          state: { 
+            from: 'invitation',
+            invitationId: invitationId,
+            message: 'Please log in to accept this invitation'
+          }
+        });
         return;
       }
 
+      // Wait a moment to ensure Firebase auth is fully ready
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      console.log('📧 InviteAccept: Firebase auth state - currentUser:', auth.currentUser);
+      console.log('📧 InviteAccept: Firebase auth state - authState:', auth.currentUser ? 'authenticated' : 'not authenticated');
+      
+      // Double-check authentication state
+      if (!auth.currentUser) {
+        console.error('❌ InviteAccept: Firebase auth.currentUser is null despite user being set');
+        setError('Authentication error. Please try logging out and back in.');
+        return;
+      }
+      
       // Fetch real invitation from Firestore
       const invitationRef = doc(db, 'invitations', invitationId);
       console.log('📧 InviteAccept: Fetching from path:', `invitations/${invitationId}`);
@@ -116,7 +139,7 @@ const InviteAccept: React.FC = () => {
       
       // Provide specific error messages based on error type
       if ((error as any)?.code === 'permission-denied') {
-        setError('Permission denied. Please make sure you are logged in with the correct email.');
+        setError('Permission denied. Please make sure you are logged in with the correct email. Try refreshing the page or logging out and back in.');
       } else if ((error as any)?.code === 'not-found') {
         setError('Invitation not found. The invitation may have expired or been deleted.');
       } else {
@@ -131,7 +154,19 @@ const InviteAccept: React.FC = () => {
     if (invitationId) {
       fetchInvitation();
     }
-  }, [invitationId, fetchInvitation]);
+  }, [invitationId, fetchInvitation, navigate]);
+
+  // Check for pending invitation after authentication
+  useEffect(() => {
+    if (user && !invitationId) {
+      const pendingInvitationId = sessionStorage.getItem('pendingInvitationId');
+      if (pendingInvitationId) {
+        console.log('📧 InviteAccept: Found pending invitation, redirecting...');
+        sessionStorage.removeItem('pendingInvitationId');
+        navigate(`/invite/accept/${pendingInvitationId}`);
+      }
+    }
+  }, [user, invitationId, navigate]);
 
   const handleAccept = async () => {
     if (!user || !invitationId) return;
@@ -202,6 +237,17 @@ const InviteAccept: React.FC = () => {
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Error</h2>
             <p className="text-gray-600 dark:text-gray-300 mb-6">{error}</p>
             <div className="space-y-3">
+              <button
+                onClick={() => {
+                  console.log('🔄 Retry: Attempting to fetch invitation again...');
+                  setLoading(true);
+                  setError(null);
+                  fetchInvitation();
+                }}
+                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium"
+              >
+                🔄 Retry
+              </button>
               <button
                 onClick={() => {
                   console.log('🔍 Debug: Current invitationId:', invitationId);

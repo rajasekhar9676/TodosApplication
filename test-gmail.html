@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Gmail API Connection</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .section { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }
+        .success { color: green; }
+        .error { color: red; }
+        .warning { color: orange; }
+        .info { color: blue; }
+        button { padding: 10px 20px; margin: 5px; border: none; border-radius: 5px; cursor: pointer; }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-warning { background: #ffc107; color: black; }
+        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Gmail API Connection Test</h1>
+    
+    <div class="section">
+        <h2>1. Environment Variables Check</h2>
+        <button onclick="checkEnvironment()" class="btn-primary">Check Environment Variables</button>
+        <div id="env-result"></div>
+    </div>
+    
+    <div class="section">
+        <h2>2. Test Gmail API Connection</h2>
+        <button onclick="testGmailConnection()" class="btn-success">Test Gmail API</button>
+        <div id="gmail-result"></div>
+    </div>
+    
+    <div class="section">
+        <h2>3. Send Test Email</h2>
+        <button onclick="sendTestEmail()" class="btn-warning">Send Test Email</button>
+        <div id="email-result"></div>
+    </div>
+    
+    <div class="section">
+        <h2>4. Troubleshooting</h2>
+        <div id="troubleshooting">
+            <h3>Common Issues:</h3>
+            <ul>
+                <li><strong>Missing Credentials:</strong> Check if .env file exists with Gmail API credentials</li>
+                <li><strong>400 Bad Request:</strong> Usually means email format issue or invalid credentials</li>
+                <li><strong>401 Unauthorized:</strong> Invalid or expired refresh token</li>
+                <li><strong>403 Forbidden:</strong> Gmail API not enabled or quota exceeded</li>
+            </ul>
+            
+            <h3>Next Steps:</h3>
+            <ol>
+                <li>Follow the <code>GMAIL_SETUP_GUIDE.md</code> to configure credentials</li>
+                <li>Create a <code>.env</code> file in your project root</li>
+                <li>Restart your development server after adding .env</li>
+                <li>Test the connection again</li>
+            </ol>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-app.js';
+        import { getFirestore, collection, addDoc } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore.js';
+        import { getAuth, signInWithPopup, GoogleAuthProvider } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-auth.js';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBGjoRRDjXLsmX-hxdQEKez4CxHkIbCcWU",
+            authDomain: "steam-outlet-425507-t1.firebaseapp.com",
+            projectId: "steam-outlet-425507-t1",
+            storageBucket: "steam-outlet-425507-t1.firebasestorage.app",
+            messagingSenderId: "925599253452",
+            appId: "1:925599253452:web:d4abc6968b07bb95131369",
+            measurementId: "G-3YPK4FWRH9"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+        const provider = new GoogleAuthProvider();
+
+        // Check environment variables
+        window.checkEnvironment = function() {
+            const result = document.getElementById('env-result');
+            result.innerHTML = '<p>Checking environment variables...</p>';
+            
+            // In a real app, these would come from process.env
+            // For this test, we'll show what should be configured
+            const envVars = [
+                'REACT_APP_GMAIL_CLIENT_ID',
+                'REACT_APP_GMAIL_CLIENT_SECRET', 
+                'REACT_APP_GMAIL_REFRESH_TOKEN',
+                'REACT_APP_SENDER_EMAIL'
+            ];
+            
+            let html = '<h3>Required Environment Variables:</h3><ul>';
+            envVars.forEach(varName => {
+                html += `<li><code>${varName}</code>: <span class="warning">Not accessible in browser</span></li>`;
+            });
+            html += '</ul>';
+            
+            html += '<p><strong>Note:</strong> Environment variables are only accessible in the browser if they start with <code>REACT_APP_</code></p>';
+            html += '<p>Check your <code>.env</code> file and restart the development server.</p>';
+            
+            result.innerHTML = html;
+        };
+
+        // Test Gmail API connection
+        window.testGmailConnection = async function() {
+            const result = document.getElementById('gmail-result');
+            result.innerHTML = '<p>Testing Gmail API connection...</p>';
+            
+            try {
+                // Sign in first
+                const authResult = await signInWithPopup(auth, provider);
+                console.log('Signed in as:', authResult.user.email);
+                
+                result.innerHTML = '<p class="success">✅ Authentication successful!</p>';
+                result.innerHTML += '<p>Now testing Gmail API...</p>';
+                
+                // Test basic Firebase operations
+                const testDoc = await addDoc(collection(db, 'gmail-test'), {
+                    test: 'Gmail API test',
+                    timestamp: new Date(),
+                    user: authResult.user.email
+                });
+                
+                result.innerHTML += '<p class="success">✅ Firebase connection working!</p>';
+                result.innerHTML += '<p>Document created with ID: ' + testDoc.id + '</p>';
+                
+                // Note: We can't test Gmail API directly from browser due to CORS
+                result.innerHTML += '<p class="warning">⚠️ Gmail API test requires backend integration</p>';
+                result.innerHTML += '<p>Check the browser console for detailed logs when sending invitations.</p>';
+                
+            } catch (error) {
+                result.innerHTML = '<p class="error">❌ Error: ' + error.message + '</p>';
+                console.error('Test error:', error);
+            }
+        };
+
+        // Send test email (simulated)
+        window.sendTestEmail = async function() {
+            const result = document.getElementById('email-result');
+            result.innerHTML = '<p>Simulating test email...</p>';
+            
+            try {
+                // Sign in first
+                if (!auth.currentUser) {
+                    await signInWithPopup(auth, provider);
+                }
+                
+                // Create a test invitation in Firestore
+                const invitationData = {
+                    teamId: 'test-team-' + Date.now(),
+                    teamName: 'Test Team',
+                    email: auth.currentUser.email,
+                    role: 'member',
+                    status: 'pending',
+                    invitedBy: auth.currentUser.uid,
+                    invitedByName: auth.currentUser.displayName || auth.currentUser.email,
+                    createdAt: new Date(),
+                    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+                };
+                
+                const docRef = await addDoc(collection(db, 'invitations'), invitationData);
+                
+                result.innerHTML = '<p class="success">✅ Test invitation created in Firestore!</p>';
+                result.innerHTML += '<p>Invitation ID: <strong>' + docRef.id + '</strong></p>';
+                result.innerHTML += '<p>This simulates the invitation creation process.</p>';
+                result.innerHTML += '<p>Check your main app to test the complete flow.</p>';
+                
+            } catch (error) {
+                result.innerHTML = '<p class="error">❌ Error: ' + error.message + '</p>';
+                console.error('Test email error:', error);
+            }
+        };
+    </script>
+</body>
+</html>

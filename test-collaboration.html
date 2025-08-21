@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Team Collaboration Features</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 1000px; margin: 0 auto; padding: 20px; }
+        .section { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }
+        .success { color: green; }
+        .error { color: red; }
+        .warning { color: orange; }
+        .info { color: blue; }
+        button { padding: 10px 20px; margin: 5px; border: none; border-radius: 5px; cursor: pointer; }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-warning { background: #ffc107; color: black; }
+        .btn-danger { background: #dc3545; color: white; }
+        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        .feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin: 20px 0; }
+        .feature-card { border: 1px solid #ddd; border-radius: 8px; padding: 20px; background: #f8f9fa; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Test Complete Team Collaboration System</h1>
+    
+    <div class="section">
+        <h2>🚀 Complete Collaboration Features Implemented</h2>
+        <div class="feature-grid">
+            <div class="feature-card">
+                <h3>👥 Team Management</h3>
+                <ul>
+                    <li>✅ View all team members</li>
+                    <li>✅ See member roles (Admin/Member)</li>
+                    <li>✅ Change member roles (Admin only)</li>
+                    <li>✅ Remove members (Admin only)</li>
+                    <li>✅ Member activity tracking</li>
+                </ul>
+            </div>
+            
+            <div class="feature-card">
+                <h3>📊 Team Overview</h3>
+                <ul>
+                    <li>✅ Team statistics dashboard</li>
+                    <li>✅ Task count by status</li>
+                    <li>✅ Recent activity feed</li>
+                    <li>✅ Team information display</li>
+                    <li>✅ Member count and details</li>
+                </ul>
+            </div>
+            
+            <div class="feature-card">
+                <h3>📝 Task Collaboration</h3>
+                <ul>
+                    <li>✅ Create team tasks</li>
+                    <li>✅ Assign tasks to members</li>
+                    <li>✅ Update task status</li>
+                    <li>✅ Real-time task updates</li>
+                    <li>✅ Task priority management</li>
+                </ul>
+            </div>
+            
+            <div class="feature-card">
+                <h3>📧 Invitation System</h3>
+                <ul>
+                    <li>✅ Send team invitations</li>
+                    <li>✅ Accept/decline invitations</li>
+                    <li>✅ Automatic team joining</li>
+                    <li>✅ Role-based permissions</li>
+                    <li>✅ Email notifications</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    
+    <div class="section">
+        <h2>1. Test Team Creation & Invitation</h2>
+        <button onclick="createTestTeam()" class="btn-primary">Create Test Team</button>
+        <button onclick="inviteTestMember()" class="btn-success">Invite Test Member</button>
+        <div id="team-result"></div>
+    </div>
+    
+    <div class="section">
+        <h2>2. Test Team Collaboration</h2>
+        <button onclick="testTeamTasks()" class="btn-warning">Test Team Tasks</button>
+        <button onclick="testMemberManagement()" class="btn-info">Test Member Management</button>
+        <div id="collaboration-result"></div>
+    </div>
+    
+    <div class="section">
+        <h2>3. Test Complete Flow</h2>
+        <button onclick="testCompleteFlow()" class="btn-success">Test Complete Collaboration Flow</button>
+        <div id="flow-result"></div>
+    </div>
+    
+    <div class="section">
+        <h2>4. How to Use in Your App</h2>
+        <div id="usage-guide">
+            <h3>📋 Step-by-Step Collaboration Guide:</h3>
+            <ol>
+                <li><strong>Create a Team:</strong> Use the Teams page to create a new team</li>
+                <li><strong>Invite Members:</strong> Click "Invite Member" and enter email addresses</li>
+                <li><strong>Accept Invitations:</strong> Members receive emails and can accept invitations</li>
+                <li><strong>Collaborate:</strong> Use the three tabs: Overview, Tasks, and Members</li>
+                <li><strong>Manage Tasks:</strong> Create, assign, and update tasks in real-time</li>
+                <li><strong>Manage Members:</strong> Change roles, remove members (Admin only)</li>
+            </ol>
+            
+            <h3>🎯 Key Features:</h3>
+            <ul>
+                <li><strong>Overview Tab:</strong> Team statistics, recent activity, and team info</li>
+                <li><strong>Tasks Tab:</strong> Create, manage, and collaborate on team tasks</li>
+                <li><strong>Members Tab:</strong> View, manage, and control team member access</li>
+                <li><strong>Real-time Updates:</strong> All changes sync instantly across team members</li>
+                <li><strong>Role-based Access:</strong> Admins can manage members, members can collaborate</li>
+            </ul>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-app.js';
+        import { getFirestore, collection, addDoc, doc, getDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore.js';
+        import { getAuth, signInWithPopup, GoogleAuthProvider } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-auth.js';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBGjoRRDjXLsmX-hxdQEKez4CxHkIbCcWU",
+            authDomain: "steam-outlet-425507-t1.firebaseapp.com",
+            projectId: "steam-outlet-425507-t1",
+            storageBucket: "steam-outlet-425507-t1.firebasestorage.app",
+            messagingSenderId: "925599253452",
+            appId: "1:925599253452:web:d4abc6968b07bb95131369",
+            measurementId: "G-3YPK4FWRH9"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+        const provider = new GoogleAuthProvider();
+
+        let testTeamId = null;
+        let testInvitationId = null;
+
+        // Create test team
+        window.createTestTeam = async function() {
+            try {
+                const result = document.getElementById('team-result');
+                result.innerHTML = '<p>Creating test team...</p>';
+                
+                // Sign in first
+                const authResult = await signInWithPopup(auth, provider);
+                console.log('Signed in as:', authResult.user.email);
+                
+                // Create test team
+                const teamData = {
+                    name: 'Test Collaboration Team',
+                    description: 'A team to test all collaboration features',
+                    members: [{
+                        uid: authResult.user.uid,
+                        role: 'admin',
+                        email: authResult.user.email,
+                        displayName: authResult.user.displayName || authResult.user.email?.split('@')[0],
+                        joinedAt: new Date(),
+                        invitedBy: authResult.user.uid
+                    }],
+                    createdAt: serverTimestamp(),
+                    createdBy: authResult.user.uid
+                };
+                
+                const docRef = await addDoc(collection(db, 'teams'), teamData);
+                testTeamId = docRef.id;
+                
+                result.innerHTML = `
+                    <p class="success">✅ Test team created successfully!</p>
+                    <p><strong>Team ID:</strong> ${testTeamId}</p>
+                    <p><strong>Team Name:</strong> ${teamData.name}</p>
+                    <p><strong>Your Role:</strong> Admin</p>
+                    <p>Now you can test all collaboration features!</p>
+                `;
+                
+            } catch (error) {
+                result.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                console.error('Create team error:', error);
+            }
+        };
+
+        // Invite test member
+        window.inviteTestMember = async function() {
+            try {
+                if (!testTeamId) {
+                    document.getElementById('team-result').innerHTML = '<p class="warning">⚠️ Please create a team first</p>';
+                    return;
+                }
+                
+                const result = document.getElementById('team-result');
+                result.innerHTML = '<p>Creating test invitation...</p>';
+                
+                // Create test invitation
+                const invitationData = {
+                    teamId: testTeamId,
+                    teamName: 'Test Collaboration Team',
+                    email: 'test@example.com',
+                    role: 'member',
+                    status: 'pending',
+                    invitedBy: auth.currentUser.uid,
+                    invitedByName: auth.currentUser.displayName || auth.currentUser.email,
+                    createdAt: serverTimestamp(),
+                    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+                };
+                
+                const docRef = await addDoc(collection(db, 'invitations'), invitationData);
+                testInvitationId = docRef.id;
+                
+                result.innerHTML += `
+                    <p class="success">✅ Test invitation created!</p>
+                    <p><strong>Invitation ID:</strong> ${testInvitationId}</p>
+                    <p><strong>Email:</strong> ${invitationData.email}</p>
+                    <p><strong>Role:</strong> ${invitationData.role}</p>
+                    <p>This simulates the invitation process.</p>
+                `;
+                
+            } catch (error) {
+                result.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                console.error('Create invitation error:', error);
+            }
+        };
+
+        // Test team tasks
+        window.testTeamTasks = async function() {
+            try {
+                if (!testTeamId) {
+                    document.getElementById('collaboration-result').innerHTML = '<p class="warning">⚠️ Please create a team first</p>';
+                    return;
+                }
+                
+                const result = document.getElementById('collaboration-result');
+                result.innerHTML = '<p>Testing team task creation...</p>';
+                
+                // Create test task
+                const taskData = {
+                    title: 'Test Collaboration Task',
+                    description: 'This is a test task to demonstrate team collaboration',
+                    status: 'todo',
+                    priority: 'medium',
+                    assignedTo: auth.currentUser.uid,
+                    assignedByName: auth.currentUser.displayName || auth.currentUser.email?.split('@')[0],
+                    createdBy: auth.currentUser.uid,
+                    createdAt: serverTimestamp(),
+                    dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+                    teamId: testTeamId
+                };
+                
+                const docRef = await addDoc(collection(db, 'teams', testTeamId, 'tasks'), taskData);
+                
+                result.innerHTML = `
+                    <p class="success">✅ Test task created successfully!</p>
+                    <p><strong>Task ID:</strong> ${docRef.id}</p>
+                    <p><strong>Title:</strong> ${taskData.title}</p>
+                    <p><strong>Status:</strong> ${taskData.status}</p>
+                    <p><strong>Priority:</strong> ${taskData.priority}</p>
+                    <p>This demonstrates real-time task collaboration!</p>
+                `;
+                
+            } catch (error) {
+                result.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                console.error('Test tasks error:', error);
+            }
+        };
+
+        // Test member management
+        window.testMemberManagement = async function() {
+            try {
+                if (!testTeamId) {
+                    document.getElementById('collaboration-result').innerHTML = '<p class="warning">⚠️ Please create a team first</p>';
+                    return;
+                }
+                
+                const result = document.getElementById('collaboration-result');
+                result.innerHTML = '<p>Testing member management...</p>';
+                
+                // Get current team data
+                const teamRef = doc(db, 'teams', testTeamId);
+                const teamSnap = await getDoc(teamRef);
+                
+                if (teamSnap.exists()) {
+                    const teamData = teamSnap.data();
+                    result.innerHTML = `
+                        <p class="success">✅ Team member management working!</p>
+                        <p><strong>Current Members:</strong> ${teamData.members.length}</p>
+                        <p><strong>Your Role:</strong> ${teamData.members.find(m => m.uid === auth.currentUser.uid)?.role}</p>
+                        <p>You can now manage team members in your main app!</p>
+                    `;
+                }
+                
+            } catch (error) {
+                result.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                console.error('Test member management error:', error);
+            }
+        };
+
+        // Test complete flow
+        window.testCompleteFlow = async function() {
+            const result = document.getElementById('flow-result');
+            result.innerHTML = `
+                <p class="info">📋 Complete Collaboration Flow Test:</p>
+                <ol>
+                    <li><strong>Open your main app</strong> in a new tab</li>
+                    <li><strong>Go to Teams page</strong> and create a new team</li>
+                    <li><strong>Invite team members</strong> using the "Invite Member" button</li>
+                    <li><strong>Open invitation link</strong> in an incognito window</li>
+                    <li><strong>Sign in with different account</strong> to accept invitation</li>
+                    <li><strong>Navigate to team page</strong> and explore all tabs:</li>
+                    <ul>
+                        <li><strong>Overview Tab:</strong> See team stats and recent activity</li>
+                        <li><strong>Tasks Tab:</strong> Create and manage team tasks</li>
+                        <li><strong>Members Tab:</strong> Manage team members and roles</li>
+                    </ul>
+                    <li><strong>Test real-time collaboration:</strong> Create tasks, update status, manage members</li>
+                </ol>
+                
+                <p><strong>Expected Results:</strong></p>
+                <ul>
+                    <li>✅ Team creation and member invitation</li>
+                    <li>✅ Invitation acceptance and team joining</li>
+                    <li>✅ Real-time task collaboration</li>
+                    <li>✅ Member role management</li>
+                    <li>✅ Team overview and statistics</li>
+                    <li>✅ Complete team collaboration system</li>
+                </ul>
+            `;
+        };
+    </script>
+</body>
+</html>

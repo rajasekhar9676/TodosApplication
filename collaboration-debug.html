@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Team Collaboration Debug - How It Should Work</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
+        .container { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .section { margin: 20px 0; padding: 20px; border: 2px solid #e0e0e0; border-radius: 10px; }
+        .success { color: #28a745; font-weight: bold; }
+        .error { color: #dc3545; font-weight: bold; }
+        .warning { color: #ffc107; font-weight: bold; }
+        .info { color: #17a2b8; font-weight: bold; }
+        button { padding: 12px 24px; margin: 8px; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold; }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-warning { background: #ffc107; color: black; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn-info { background: #17a2b8; color: white; }
+        .highlight { background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107; margin: 15px 0; }
+        .team-box { background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 10px 0; border: 1px solid #dee2e6; }
+        .flow-diagram { background: #e3f2fd; padding: 20px; border-radius: 8px; margin: 15px 0; }
+        .step { background: white; padding: 10px; margin: 8px 0; border-radius: 5px; border-left: 4px solid #2196f3; }
+        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; font-size: 12px; }
+        .email-mismatch { background: #ffebee; padding: 15px; border-radius: 8px; border-left: 4px solid #f44336; margin: 15px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Team Collaboration Debug - How It Should Work</h1>
+        
+        <div class="highlight">
+            <h3>🎯 Your Question:</h3>
+            <p><strong>"How can we collaborate if we're sending to different emails? Shouldn't we send to the same email to collaborate?"</strong></p>
+            <p>Great question! Let me explain how team collaboration is supposed to work vs. what's currently broken.</p>
+        </div>
+        
+        <div class="section">
+            <h2>📋 How Team Collaboration SHOULD Work:</h2>
+            <div class="flow-diagram">
+                <h4>🔄 Normal Collaboration Flow:</h4>
+                <div class="step">
+                    <strong>Step 1:</strong> Person A creates a team and invites Person B (different email)
+                </div>
+                <div class="step">
+                    <strong>Step 2:</strong> Person B receives invitation email and clicks "Accept"
+                </div>
+                <div class="step">
+                    <strong>Step 3:</strong> Person B gets added to the team (regardless of email)
+                </div>
+                <div class="step">
+                    <strong>Step 4:</strong> Both people can now collaborate on the same team
+                </div>
+            </div>
+            
+            <div class="team-box">
+                <h4>✅ What Should Happen:</h4>
+                <ul>
+                    <li><strong>Different emails are OK!</strong> That's how collaboration works</li>
+                    <li>Person A invites Person B by email</li>
+                    <li>Person B accepts and joins the team</li>
+                    <li>Both can see the team in their dashboard</li>
+                    <li>Both can work on team tasks together</li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>🔐 Sign In to Debug Your Situation</h2>
+            <button onclick="signIn()" class="btn-primary">Sign In with Google</button>
+            <div id="signin-result"></div>
+        </div>
+        
+        <div class="section">
+            <h2>🔍 Debug Your Current Collaboration Status</h2>
+            <button onclick="debugCollaboration()" class="btn-success">Debug My Collaboration Status</button>
+            <div id="debug-result"></div>
+        </div>
+        
+        <div class="section">
+            <h2>📧 Check All Invitations in the System</h2>
+            <button onclick="checkAllInvitations()" class="btn-warning">Check All Invitations</button>
+            <div id="invitations-result"></div>
+        </div>
+        
+        <div class="section">
+            <h2>🏗️ Check All Teams in the System</h2>
+            <button onclick="checkAllTeams()" class="btn-info">Check All Teams</button>
+            <div id="teams-result"></div>
+        </div>
+        
+        <div class="email-mismatch">
+            <h3>⚠️ The Real Problem - Email Mismatch:</h3>
+            <p><strong>Your situation:</strong></p>
+            <ul>
+                <li>Invitation was sent to: <code>digital@educationtoday.co</code></li>
+                <li>You're signed in with: <strong>different email</strong> (probably your personal Gmail)</li>
+                <li>Result: <strong>Email mismatch → invitation acceptance fails → no collaboration</strong></li>
+            </ul>
+            <p><strong>This is why your teams array is empty!</strong></p>
+        </div>
+        
+        <div class="highlight">
+            <h3>💡 Solutions:</h3>
+            <ol>
+                <li><strong>Option 1:</strong> Sign in with the email that received the invitation (<code>digital@educationtoday.co</code>)</li>
+                <li><strong>Option 2:</strong> Ask the team creator to send a new invitation to your current email</li>
+                <li><strong>Option 3:</strong> Use the manual fix tool to add yourself to the team</li>
+            </ol>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-app.js';
+        import { getFirestore, doc, getDoc, updateDoc, setDoc, collection, query, where, getDocs, orderBy } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore.js';
+        import { getAuth, signInWithPopup, GoogleAuthProvider } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-auth.js';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBGjoRRDjXLsmX-hxdQEKez4CxHkIbCcWU",
+            authDomain: "steam-outlet-425507-t1.firebaseapp.com",
+            projectId: "steam-outlet-425507-t1",
+            storageBucket: "steam-outlet-425507-t1.firebasestorage.app",
+            messagingSenderId: "925599253452",
+            appId: "1:925599253452:web:d4abc6968b07bb95131369",
+            measurementId: "G-3YPK4FWRH9"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+        const provider = new GoogleAuthProvider();
+
+        let currentUser = null;
+
+        // Sign in
+        window.signIn = async function() {
+            try {
+                const result = document.getElementById('signin-result');
+                result.innerHTML = '<p>Signing in...</p>';
+                
+                const authResult = await signInWithPopup(auth, provider);
+                currentUser = authResult.user;
+                
+                result.innerHTML = `
+                    <p class="success">✅ Signed in successfully!</p>
+                    <div class="team-box">
+                        <p><strong>User ID:</strong> ${currentUser.uid}</p>
+                        <p><strong>Email:</strong> ${currentUser.email}</p>
+                        <p><strong>Display Name:</strong> ${currentUser.displayName || 'None'}</p>
+                    </div>
+                    <p class="info">Now click "Debug My Collaboration Status" to see what's happening!</p>
+                `;
+                
+                console.log('✅ Signed in as:', currentUser.email);
+                
+            } catch (error) {
+                document.getElementById('signin-result').innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                console.error('Sign in error:', error);
+            }
+        };
+
+        // Debug collaboration status
+        window.debugCollaboration = async function() {
+            try {
+                if (!currentUser && auth.currentUser) {
+                    currentUser = auth.currentUser;
+                }
+                
+                if (!currentUser) {
+                    document.getElementById('debug-result').innerHTML = '<p class="warning">⚠️ Please sign in first</p>';
+                    return;
+                }
+                
+                const result = document.getElementById('debug-result');
+                result.innerHTML = '<p>🔍 Analyzing your collaboration status...</p>';
+                
+                // Check user's current teams
+                const userRef = doc(db, 'users', currentUser.uid);
+                const userSnap = await getDoc(userRef);
+                
+                let userTeams = [];
+                let userJoinedTeams = [];
+                
+                if (userSnap.exists()) {
+                    const userData = userSnap.data();
+                    userTeams = userData.teams || [];
+                    userJoinedTeams = userData.joinedTeams || [];
+                }
+                
+                // Check teams where user is a member
+                const teamsQuery = query(
+                    collection(db, 'teams'),
+                    where('members', 'array-contains', currentUser.uid)
+                );
+                
+                const teamsSnap = await getDocs(teamsQuery);
+                const actualMemberTeams = [];
+                
+                if (!teamsSnap.empty) {
+                    teamsSnap.forEach(doc => {
+                        actualMemberTeams.push({ id: doc.id, ...doc.data() });
+                    });
+                }
+                
+                // Check accepted invitations
+                const acceptedQuery = query(
+                    collection(db, 'invitations'),
+                    where('acceptedBy', '==', currentUser.uid)
+                );
+                
+                const acceptedSnap = await getDocs(acceptedQuery);
+                const acceptedInvitations = [];
+                
+                if (!acceptedSnap.empty) {
+                    acceptedSnap.forEach(doc => {
+                        acceptedInvitations.push({ id: doc.id, ...doc.data() });
+                    });
+                }
+                
+                // Check pending invitations for user's email
+                const pendingQuery = query(
+                    collection(db, 'invitations'),
+                    where('email', '==', currentUser.email),
+                    where('status', '==', 'pending')
+                );
+                
+                const pendingSnap = await getDocs(pendingQuery);
+                const pendingInvitations = [];
+                
+                if (!pendingSnap.empty) {
+                    pendingSnap.forEach(doc => {
+                        pendingInvitations.push({ id: doc.id, ...doc.data() });
+                    });
+                }
+                
+                // Display results
+                result.innerHTML = `
+                    <h3>🔍 Collaboration Analysis for ${currentUser.email}</h3>
+                    
+                    <div class="team-box">
+                        <h4>📋 Your Profile Status:</h4>
+                        <p><strong>teams field:</strong> ${userTeams.length} teams: [${userTeams.join(', ') || 'empty'}]</p>
+                        <p><strong>joinedTeams field:</strong> ${userJoinedTeams.length} teams: [${userJoinedTeams.join(', ') || 'empty'}]</p>
+                    </div>
+                    
+                    <div class="team-box">
+                        <h4>🏗️ Teams Where You're Actually a Member:</h4>
+                        ${actualMemberTeams.length > 0 ? 
+                            actualMemberTeams.map(team => `
+                                <div style="border: 1px solid #ddd; padding: 10px; margin: 8px 0; border-radius: 5px;">
+                                    <p><strong>Team:</strong> ${team.name}</p>
+                                    <p><strong>Team ID:</strong> ${team.id}</p>
+                                    <p><strong>Members:</strong> ${team.members?.length || 0}</p>
+                                </div>
+                            `).join('') : 
+                            '<p>❌ No teams found where you are a member</p>'
+                        }
+                    </div>
+                    
+                    <div class="team-box">
+                        <h4>📧 Invitations You've Accepted:</h4>
+                        ${acceptedInvitations.length > 0 ? 
+                            acceptedInvitations.map(inv => `
+                                <div style="border: 1px solid #ddd; padding: 10px; margin: 8px 0; border-radius: 5px;">
+                                    <p><strong>Team:</strong> ${inv.teamName}</p>
+                                    <p><strong>Team ID:</strong> ${inv.teamId}</p>
+                                    <p><strong>Email in invitation:</strong> ${inv.email}</p>
+                                    <p><strong>Your current email:</strong> ${currentUser.email}</p>
+                                    <p><strong>Status:</strong> ${inv.status}</p>
+                                    ${inv.email !== currentUser.email ? 
+                                        '<p class="error"><strong>⚠️ EMAIL MISMATCH!</strong></p>' : 
+                                        '<p class="success"><strong>✅ Email matches!</strong></p>'
+                                    }
+                                </div>
+                            `).join('') : 
+                            '<p>❌ No accepted invitations found</p>'
+                        }
+                    </div>
+                    
+                    <div class="team-box">
+                        <h4>📧 Pending Invitations for Your Email:</h4>
+                        ${pendingInvitations.length > 0 ? 
+                            pendingInvitations.map(inv => `
+                                <div style="border: 1px solid #ddd; padding: 10px; margin: 8px 0; border-radius: 5px;">
+                                    <p><strong>Team:</strong> ${inv.teamName}</p>
+                                    <p><strong>Team ID:</strong> ${inv.teamId}</p>
+                                    <p><strong>Email:</strong> ${inv.email}</p>
+                                    <p><strong>Status:</strong> ${inv.status}</p>
+                                </div>
+                            `).join('') : 
+                            '<p>❌ No pending invitations for your email</p>'
+                        }
+                    </div>
+                    
+                    <div class="email-mismatch">
+                        <h4>🚨 Problem Analysis:</h4>
+                        ${acceptedInvitations.length > 0 && acceptedInvitations.some(inv => inv.email !== currentUser.email) ? 
+                            '<p><strong>❌ EMAIL MISMATCH DETECTED!</strong> You accepted invitations sent to different emails. This is why your teams array is empty.</p>' : 
+                            '<p><strong>✅ No email mismatches found</strong> in accepted invitations.</p>'
+                        }
+                        ${actualMemberTeams.length === 0 && userTeams.length === 0 ? 
+                            '<p><strong>❌ NO TEAMS IN PROFILE!</strong> You are not a member of any teams, which is why your dashboard shows empty teams.</p>' : 
+                            '<p><strong>✅ Teams found!</strong> You should see teams in your dashboard.</p>'
+                        }
+                    </div>
+                `;
+                
+            } catch (error) {
+                document.getElementById('debug-result').innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                console.error('Error debugging collaboration:', error);
+            }
+        };
+
+        // Check all invitations
+        window.checkAllInvitations = async function() {
+            try {
+                const result = document.getElementById('invitations-result');
+                result.innerHTML = '<p>🔍 Checking all invitations in the system...</p>';
+                
+                const invitationsQuery = query(
+                    collection(db, 'invitations'),
+                    orderBy('createdAt', 'desc')
+                );
+                
+                const invitationsSnap = await getDocs(invitationsQuery);
+                
+                if (!invitationsSnap.empty) {
+                    const invitations = [];
+                    invitationsSnap.forEach(doc => {
+                        invitations.push({ id: doc.id, ...doc.data() });
+                    });
+                    
+                    result.innerHTML = `
+                        <h3>📧 All Invitations in System (${invitations.length})</h3>
+                        ${invitations.map(inv => `
+                            <div class="team-box">
+                                <h4>📧 ${inv.teamName || 'Unknown Team'}</h4>
+                                <p><strong>Invitation ID:</strong> ${inv.id}</p>
+                                <p><strong>Team ID:</strong> ${inv.teamId}</p>
+                                <p><strong>Email:</strong> ${inv.email}</p>
+                                <p><strong>Status:</strong> ${inv.status}</p>
+                                <p><strong>Role:</strong> ${inv.role}</p>
+                                <p><strong>Accepted By:</strong> ${inv.acceptedBy || 'Not accepted'}</p>
+                                ${currentUser && inv.email === currentUser.email ? 
+                                    '<p class="success"><strong>✅ This invitation is for your email!</strong></p>' : 
+                                    currentUser && inv.email !== currentUser.email ? 
+                                        '<p class="warning"><strong>⚠️ Different email</strong></p>' : 
+                                        ''
+                                }
+                            </div>
+                        `).join('')}
+                    `;
+                } else {
+                    result.innerHTML = '<p>❌ No invitations found in the system</p>';
+                }
+                
+            } catch (error) {
+                document.getElementById('invitations-result').innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                console.error('Error checking invitations:', error);
+            }
+        };
+
+        // Check all teams
+        window.checkAllTeams = async function() {
+            try {
+                const result = document.getElementById('teams-result');
+                result.innerHTML = '<p>🔍 Checking all teams in the system...</p>';
+                
+                const teamsQuery = query(
+                    collection(db, 'teams'),
+                    orderBy('createdAt', 'desc')
+                );
+                
+                const teamsSnap = await getDocs(teamsQuery);
+                
+                if (!teamsSnap.empty) {
+                    const teams = [];
+                    teamsSnap.forEach(doc => {
+                        teams.push({ id: doc.id, ...doc.data() });
+                    });
+                    
+                    result.innerHTML = `
+                        <h3>🏗️ All Teams in System (${teams.length})</h3>
+                        ${teams.map(team => `
+                            <div class="team-box">
+                                <h4>🏗️ ${team.name}</h4>
+                                <p><strong>Team ID:</strong> ${team.id}</p>
+                                <p><strong>Description:</strong> ${team.description || 'No description'}</p>
+                                <p><strong>Members:</strong> ${team.members?.length || 0}</p>
+                                <p><strong>Created By:</strong> ${team.createdBy}</p>
+                                ${currentUser && team.members && team.members.includes(currentUser.uid) ? 
+                                    '<p class="success"><strong>✅ You are a member of this team!</strong></p>' : 
+                                    '<p class="warning"><strong>⚠️ You are NOT a member of this team</strong></p>'
+                                }
+                            </div>
+                        `).join('')}
+                    `;
+                } else {
+                    result.innerHTML = '<p>❌ No teams found in the system</p>';
+                }
+                
+            } catch (error) {
+                document.getElementById('teams-result').innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                console.error('Error checking teams:', error);
+            }
+        };
+
+        // Auto-sign in if already authenticated
+        auth.onAuthStateChanged((user) => {
+            if (user && !currentUser) {
+                currentUser = user;
+                console.log('Auto-detected signed in user:', user.email);
+            }
+        });
+    </script>
+</body>
+</html>

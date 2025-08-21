@@ -16,7 +16,7 @@ export const useSaveUser = (user: User | null) => {
           displayName: user.displayName || '',
           email: user.email || '',
           role: 'member',
-          joinedTeams: []
+          teams: []
         });
       }
     };

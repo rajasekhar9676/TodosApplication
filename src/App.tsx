@@ -44,6 +44,7 @@ const AppContent: React.FC = () => {
         <Route path="/tasks" element={<Tasks />} />
         <Route path="/calendar" element={<Calendar />} />
         <Route path="/voice-recordings" element={<VoiceRecordings />} />
+        <Route path="/invite/accept/:invitationId" element={<InviteAccept />} />
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>

@@ -32,6 +32,13 @@ class GmailService {
     console.log('Client Secret:', this.credentials.clientSecret ? 'Found' : 'Missing');
     console.log('Refresh Token:', this.credentials.refreshToken ? `Found (${this.credentials.refreshToken.length} chars)` : 'Missing');
     console.log('Sender Email:', this.credentials.senderEmail);
+    
+    // Check if credentials are properly configured
+    if (!this.credentials.clientId || !this.credentials.clientSecret || !this.credentials.refreshToken) {
+      console.warn('⚠️ Gmail API credentials are not fully configured!');
+      console.warn('📧 Email sending will fall back to DEMO MODE');
+      console.warn('📖 See GMAIL_SETUP_GUIDE.md for configuration instructions');
+    }
   }
 
   // Get the base URL for invitation links
@@ -80,31 +87,43 @@ class GmailService {
   private createEmailMessage(emailData: EmailData): string {
     const boundary = 'boundary_' + Math.random().toString(36).substring(2);
     
+    // Create RFC 2822 compliant email message
     const message = [
       `From: ${this.credentials.senderEmail}`,
       `To: ${emailData.to}`,
       `Subject: ${emailData.subject}`,
       'MIME-Version: 1.0',
       `Content-Type: multipart/alternative; boundary="${boundary}"`,
+      'Date: ' + new Date().toUTCString(),
+      'Message-ID: <' + Date.now() + '.' + Math.random().toString(36).substring(2) + '@todopro.com>',
       '',
       `--${boundary}`,
       'Content-Type: text/plain; charset=UTF-8',
+      'Content-Transfer-Encoding: 7bit',
       '',
       emailData.textBody || emailData.htmlBody.replace(/<[^>]*>/g, ''),
       '',
       `--${boundary}`,
       'Content-Type: text/html; charset=UTF-8',
+      'Content-Transfer-Encoding: 7bit',
       '',
       emailData.htmlBody,
       '',
       `--${boundary}--`,
+      ''
     ].join('\r\n');
 
-    // Use browser-compatible base64 encoding instead of Node.js Buffer
-    const encoder = new TextEncoder();
-    const bytes = encoder.encode(message);
-    const base64 = btoa(String.fromCharCode(...bytes));
-    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    // Unicode-safe base64 encoding for Gmail API
+    try {
+      // First try standard btoa (for ASCII-only content)
+      return btoa(message).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    } catch (error) {
+      // If btoa fails due to Unicode characters, use TextEncoder + btoa
+      const encoder = new TextEncoder();
+      const bytes = encoder.encode(message);
+      const base64 = btoa(String.fromCharCode(...bytes));
+      return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
   }
 
   // Create HTML email template for invitations
@@ -292,7 +311,7 @@ class GmailService {
       };
 
       const message = this.createEmailMessage(emailData);
-      const encodedMessage = btoa(message).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      console.log('📧 Raw email message created, length:', message.length);
 
       const response = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/send`, {
         method: 'POST',
@@ -301,13 +320,20 @@ class GmailService {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          raw: encodedMessage
+          raw: message
         })
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch (e) {
+          errorData = await response.text();
+        }
         console.error('❌ Gmail API error:', errorData);
+        console.error('❌ Response status:', response.status);
+        console.error('❌ Response headers:', response.headers);
         throw new Error(`Gmail API error: ${response.status} ${response.statusText}`);
       }
 

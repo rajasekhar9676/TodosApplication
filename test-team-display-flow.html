@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Team Display Flow After Invitation</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 1000px; margin: 0 auto; padding: 20px; }
+        .section { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }
+        .success { color: green; }
+        .error { color: red; }
+        .warning { color: orange; }
+        .info { color: blue; }
+        button { padding: 10px 20px; margin: 5px; border: none; border-radius: 5px; cursor: pointer; }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-warning { background: #ffc107; color: black; }
+        .btn-danger { background: #dc3545; color: white; }
+        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        .step { margin: 10px 0; padding: 15px; background: #f8f9fa; border-radius: 5px; border-left: 4px solid #007bff; }
+        .step-success { border-left-color: #28a745; background: #f8fff8; }
+        .step-error { border-left-color: #dc3545; background: #fff8f8; }
+        .log { background: #000; color: #00ff00; padding: 15px; border-radius: 5px; font-family: monospace; max-height: 300px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Test Complete Team Display Flow</h1>
+    
+    <div class="section">
+        <h2>🎯 Problem Being Solved</h2>
+        <p><strong>Issue:</strong> After accepting an invitation, users are redirected to dashboard but can't see the team they just joined.</p>
+        <p><strong>Solution:</strong> Enhanced dashboard with real-time team updates, refresh functionality, and better error handling.</p>
+    </div>
+    
+    <div class="section">
+        <h2>📋 Test Steps</h2>
+        <div class="step">
+            <strong>Step 1:</strong> Create a test team and invitation
+        </div>
+        <div class="step">
+            <strong>Step 2:</strong> Accept invitation (simulate)
+        </div>
+        <div class="step">
+            <strong>Step 3:</strong> Verify team appears in dashboard
+        </div>
+        <div class="step">
+            <strong>Step 4:</strong> Test real-time updates
+        </div>
+    </div>
+    
+    <div class="section">
+        <h2>1. Create Test Team & Invitation</h2>
+        <button onclick="createTestTeam()" class="btn-primary">Create Test Team</button>
+        <button onclick="createTestInvitation()" class="btn-success">Create Test Invitation</button>
+        <div id="setup-result"></div>
+    </div>
+    
+    <div class="section">
+        <h2>2. Simulate Invitation Acceptance</h2>
+        <button onclick="simulateInvitationAcceptance()" class="btn-warning">Simulate Accept Invitation</button>
+        <button onclick="checkUserTeams()" class="btn-info">Check User Teams</button>
+        <div id="acceptance-result"></div>
+    </div>
+    
+    <div class="section">
+        <h2>3. Test Dashboard Team Display</h2>
+        <button onclick="testDashboardDisplay()" class="btn-success">Test Dashboard Display</button>
+        <button onclick="refreshUserData()" class="btn-primary">Refresh User Data</button>
+        <div id="dashboard-result"></div>
+    </div>
+    
+    <div class="section">
+        <h2>4. Real-time Updates Test</h2>
+        <button onclick="testRealTimeUpdates()" class="btn-warning">Test Real-time Updates</button>
+        <button onclick="addTeamMember()" class="btn-info">Add Team Member</button>
+        <div id="realtime-result"></div>
+    </div>
+    
+    <div class="section">
+        <h2>5. Debug Information</h2>
+        <button onclick="showDebugInfo()" class="btn-danger">Show Debug Info</button>
+        <button onclick="clearLogs()" class="btn-warning">Clear Logs</button>
+        <div id="debug-info"></div>
+        <div class="log" id="debug-log"></div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-app.js';
+        import { getFirestore, collection, addDoc, doc, getDoc, updateDoc, serverTimestamp, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore.js';
+        import { getAuth, signInWithPopup, GoogleAuthProvider } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-auth.js';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBGjoRRDjXLsmX-hxdQEKez4CxHkIbCcWU",
+            authDomain: "steam-outlet-425507-t1.firebaseapp.com",
+            projectId: "steam-outlet-425507-t1",
+            storageBucket: "steam-outlet-425507-t1.firebasestorage.app",
+            messagingSenderId: "925599253452",
+            appId: "1:925599253452:web:d4abc6968b07bb95131369",
+            measurementId: "G-3YPK4FWRH9"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+        const provider = new GoogleAuthProvider();
+
+        let testTeamId = null;
+        let testInvitationId = null;
+        let testUserId = null;
+
+        // Logging function
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('debug-log');
+            const timestamp = new Date().toLocaleTimeString();
+            const color = type === 'error' ? '#ff6b6b' : type === 'success' ? '#51cf66' : type === 'warning' ? '#ffd43b' : '#74c0fc';
+            logDiv.innerHTML += `<div style="color: ${color}">[${timestamp}] ${message}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(`[${timestamp}] ${message}`);
+        }
+
+        // Create test team
+        window.createTestTeam = async function() {
+            try {
+                const result = document.getElementById('setup-result');
+                result.innerHTML = '<p>Creating test team...</p>';
+                
+                // Sign in first
+                const authResult = await signInWithPopup(auth, provider);
+                testUserId = authResult.user.uid;
+                log(`✅ Signed in as: ${authResult.user.email}`, 'success');
+                
+                // Create test team
+                const teamData = {
+                    name: 'Test Display Team',
+                    description: 'A team to test dashboard display after invitation',
+                    members: [{
+                        uid: testUserId,
+                        role: 'admin',
+                        email: authResult.user.email,
+                        displayName: authResult.user.displayName || authResult.user.email?.split('@')[0],
+                        joinedAt: new Date(),
+                        invitedBy: testUserId
+                    }],
+                    createdAt: serverTimestamp(),
+                    createdBy: testUserId
+                };
+                
+                const docRef = await addDoc(collection(db, 'teams'), teamData);
+                testTeamId = docRef.id;
+                
+                result.innerHTML = `
+                    <p class="success">✅ Test team created successfully!</p>
+                    <p><strong>Team ID:</strong> ${testTeamId}</p>
+                    <p><strong>Team Name:</strong> ${teamData.name}</p>
+                    <p><strong>Your Role:</strong> Admin</p>
+                `;
+                
+                log(`✅ Test team created: ${testTeamId}`, 'success');
+                
+            } catch (error) {
+                result.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                log(`❌ Error creating team: ${error.message}`, 'error');
+            }
+        };
+
+        // Create test invitation
+        window.createTestInvitation = async function() {
+            try {
+                if (!testTeamId) {
+                    document.getElementById('setup-result').innerHTML = '<p class="warning">⚠️ Please create a team first</p>';
+                    return;
+                }
+                
+                const result = document.getElementById('setup-result');
+                result.innerHTML += '<p>Creating test invitation...</p>';
+                
+                // Create test invitation
+                const invitationData = {
+                    teamId: testTeamId,
+                    teamName: 'Test Display Team',
+                    email: 'test@example.com',
+                    role: 'member',
+                    status: 'pending',
+                    invitedBy: testUserId,
+                    invitedByName: 'Test User',
+                    createdAt: serverTimestamp(),
+                    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+                };
+                
+                const docRef = await addDoc(collection(db, 'invitations'), invitationData);
+                testInvitationId = docRef.id;
+                
+                result.innerHTML += `
+                    <p class="success">✅ Test invitation created!</p>
+                    <p><strong>Invitation ID:</strong> ${testInvitationId}</p>
+                    <p><strong>Email:</strong> ${invitationData.email}</p>
+                    <p><strong>Role:</strong> ${invitationData.role}</p>
+                `;
+                
+                log(`✅ Test invitation created: ${testInvitationId}`, 'success');
+                
+            } catch (error) {
+                result.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                log(`❌ Error creating invitation: ${error.message}`, 'error');
+            }
+        };
+
+        // Simulate invitation acceptance
+        window.simulateInvitationAcceptance = async function() {
+            try {
+                if (!testInvitationId || !testTeamId) {
+                    document.getElementById('acceptance-result').innerHTML = '<p class="warning">⚠️ Please create team and invitation first</p>';
+                    return;
+                }
+                
+                const result = document.getElementById('acceptance-result');
+                result.innerHTML = '<p>Simulating invitation acceptance...</p>';
+                
+                // Update invitation status
+                const invitationRef = doc(db, 'invitations', testInvitationId);
+                await updateDoc(invitationRef, { 
+                    status: 'accepted',
+                    acceptedAt: serverTimestamp(),
+                    acceptedBy: testUserId
+                });
+                
+                // Add user to team (simulate the invitation service)
+                const teamRef = doc(db, 'teams', testTeamId);
+                const teamSnap = await getDoc(teamRef);
+                
+                if (teamSnap.exists()) {
+                    const teamData = teamSnap.data();
+                    const currentMembers = teamData.members || [];
+                    
+                    // Add new member
+                    const newMember = {
+                        uid: testUserId,
+                        role: 'member',
+                        email: 'test@example.com',
+                        displayName: 'Test Member',
+                        joinedAt: new Date(),
+                        invitedBy: testUserId
+                    };
+                    
+                    await updateDoc(teamRef, {
+                        members: [...currentMembers, newMember]
+                    });
+                    
+                    // Add team to user's teams array
+                    const userRef = doc(db, 'users', testUserId);
+                    const userSnap = await getDoc(userRef);
+                    
+                    if (userSnap.exists()) {
+                        const userData = userSnap.data();
+                        const updatedTeams = [...(userData?.teams || []), testTeamId];
+                        
+                        await updateDoc(userRef, { 
+                            teams: updatedTeams,
+                            lastUpdated: serverTimestamp()
+                        });
+                    } else {
+                        // Create user document if it doesn't exist
+                        await updateDoc(userRef, {
+                            uid: testUserId,
+                            email: 'test@example.com',
+                            teams: [testTeamId],
+                            createdAt: serverTimestamp(),
+                            lastUpdated: serverTimestamp()
+                        });
+                    }
+                    
+                    result.innerHTML = `
+                        <p class="success">✅ Invitation acceptance simulated successfully!</p>
+                        <p><strong>User added to team:</strong> ${testTeamId}</p>
+                        <p><strong>Team added to user profile</strong></p>
+                        <p>Now check if the team appears in the dashboard...</p>
+                    `;
+                    
+                    log(`✅ Invitation acceptance simulated for user: ${testUserId}`, 'success');
+                }
+                
+            } catch (error) {
+                result.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                log(`❌ Error simulating acceptance: ${error.message}`, 'error');
+            }
+        };
+
+        // Check user's teams
+        window.checkUserTeams = async function() {
+            try {
+                if (!testUserId) {
+                    document.getElementById('acceptance-result').innerHTML = '<p class="warning">⚠️ Please sign in first</p>';
+                    return;
+                }
+                
+                const result = document.getElementById('acceptance-result');
+                result.innerHTML += '<p>Checking user teams...</p>';
+                
+                const userRef = doc(db, 'users', testUserId);
+                const userSnap = await getDoc(userRef);
+                
+                if (userSnap.exists()) {
+                    const userData = userSnap.data();
+                    result.innerHTML += `
+                        <p class="success">✅ User teams found!</p>
+                        <p><strong>Teams array:</strong> ${JSON.stringify(userData.teams)}</p>
+                        <p><strong>Team count:</strong> ${userData.teams?.length || 0}</p>
+                    `;
+                    
+                    log(`📋 User teams: ${JSON.stringify(userData.teams)}`, 'info');
+                } else {
+                    result.innerHTML += '<p class="error">❌ User document not found</p>';
+                    log(`❌ User document not found for: ${testUserId}`, 'error');
+                }
+                
+            } catch (error) {
+                result.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                log(`❌ Error checking user teams: ${error.message}`, 'error');
+            }
+        };
+
+        // Test dashboard display
+        window.testDashboardDisplay = async function() {
+            try {
+                if (!testUserId) {
+                    document.getElementById('dashboard-result').innerHTML = '<p class="warning">⚠️ Please sign in first</p>';
+                    return;
+                }
+                
+                const result = document.getElementById('dashboard-result');
+                result.innerHTML = '<p>Testing dashboard team display...</p>';
+                
+                // Fetch user's teams (simulate dashboard)
+                const userRef = doc(db, 'users', testUserId);
+                const userSnap = await getDoc(userRef);
+                
+                if (userSnap.exists()) {
+                    const userData = userSnap.data();
+                    
+                    if (userData?.teams && userData.teams.length > 0) {
+                        // Fetch team details
+                        const teamPromises = userData.teams.map(async (teamId: string) => {
+                            const teamRef = doc(db, 'teams', teamId);
+                            const teamSnap = await getDoc(teamRef);
+                            if (teamSnap.exists()) {
+                                return { id: teamId, ...teamSnap.data() };
+                            }
+                            return null;
+                        });
+                        
+                        const teamsData = (await Promise.all(teamPromises)).filter(Boolean);
+                        
+                        result.innerHTML = `
+                            <p class="success">✅ Dashboard team display working!</p>
+                            <p><strong>Teams found:</strong> ${teamsData.length}</p>
+                            <div style="margin-top: 10px;">
+                                ${teamsData.map(team => `
+                                    <div style="padding: 10px; background: #f8f9fa; border-radius: 5px; margin: 5px 0;">
+                                        <strong>${team.name}</strong> - ${team.description}<br>
+                                        <small>Members: ${team.members?.length || 0}</small>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        `;
+                        
+                        log(`✅ Dashboard found ${teamsData.length} teams`, 'success');
+                    } else {
+                        result.innerHTML = `
+                            <p class="warning">⚠️ No teams found in user profile</p>
+                            <p>This suggests the invitation acceptance didn't properly update the user's teams array.</p>
+                        `;
+                        log(`⚠️ No teams found in user profile`, 'warning');
+                    }
+                }
+                
+            } catch (error) {
+                result.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                log(`❌ Error testing dashboard: ${error.message}`, 'error');
+            }
+        };
+
+        // Refresh user data
+        window.refreshUserData = async function() {
+            try {
+                if (!testUserId) {
+                    document.getElementById('dashboard-result').innerHTML = '<p class="warning">⚠️ Please sign in first</p>';
+                    return;
+                }
+                
+                const result = document.getElementById('dashboard-result');
+                result.innerHTML += '<p>Refreshing user data...</p>';
+                
+                // Force refresh by re-fetching user data
+                const userRef = doc(db, 'users', testUserId);
+                const userSnap = await getDoc(userRef);
+                
+                if (userSnap.exists()) {
+                    const userData = userSnap.data();
+                    result.innerHTML += `
+                        <p class="success">✅ User data refreshed!</p>
+                        <p><strong>Current teams:</strong> ${JSON.stringify(userData.teams)}</p>
+                    `;
+                    
+                    log(`🔄 User data refreshed: ${JSON.stringify(userData.teams)}`, 'info');
+                }
+                
+            } catch (error) {
+                result.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                log(`❌ Error refreshing user data: ${error.message}`, 'error');
+            }
+        };
+
+        // Test real-time updates
+        window.testRealTimeUpdates = async function() {
+            try {
+                if (!testUserId) {
+                    document.getElementById('realtime-result').innerHTML = '<p class="warning">⚠️ Please sign in first</p>';
+                    return;
+                }
+                
+                const result = document.getElementById('realtime-result');
+                result.innerHTML = '<p>Setting up real-time listener...</p>';
+                
+                // Set up real-time listener for user
+                const userRef = doc(db, 'users', testUserId);
+                const unsubscribe = onSnapshot(userRef, (doc) => {
+                    if (doc.exists()) {
+                        const userData = doc.data();
+                        result.innerHTML = `
+                            <p class="success">✅ Real-time updates working!</p>
+                            <p><strong>Teams updated:</strong> ${JSON.stringify(userData.teams)}</p>
+                            <p><small>This updates automatically when user data changes</small></p>
+                        `;
+                        
+                        log(`🔄 Real-time update: ${JSON.stringify(userData.teams)}`, 'info');
+                    }
+                }, (error) => {
+                    log(`❌ Real-time listener error: ${error.message}`, 'error');
+                });
+                
+                // Store unsubscribe function globally for cleanup
+                window.unsubscribeUser = unsubscribe;
+                
+                result.innerHTML += '<p>✅ Real-time listener active. Try making changes to see live updates!</p>';
+                
+            } catch (error) {
+                result.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                log(`❌ Error setting up real-time updates: ${error.message}`, 'error');
+            }
+        };
+
+        // Add team member to test real-time updates
+        window.addTeamMember = async function() {
+            try {
+                if (!testTeamId) {
+                    document.getElementById('realtime-result').innerHTML = '<p class="warning">⚠️ Please create a team first</p>';
+                    return;
+                }
+                
+                const result = document.getElementById('realtime-result');
+                result.innerHTML += '<p>Adding test team member...</p>';
+                
+                const teamRef = doc(db, 'teams', testTeamId);
+                const teamSnap = await getDoc(teamRef);
+                
+                if (teamSnap.exists()) {
+                    const teamData = teamSnap.data();
+                    const currentMembers = teamData.members || [];
+                    
+                    const newMember = {
+                        uid: 'test-member-' + Date.now(),
+                        role: 'member',
+                        email: 'testmember@example.com',
+                        displayName: 'Test Member',
+                        joinedAt: new Date(),
+                        invitedBy: testUserId
+                    };
+                    
+                    await updateDoc(teamRef, {
+                        members: [...currentMembers, newMember]
+                    });
+                    
+                    result.innerHTML += '<p class="success">✅ Test member added! Check real-time updates above.</p>';
+                    log(`✅ Test member added to team: ${newMember.displayName}`, 'success');
+                }
+                
+            } catch (error) {
+                result.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                log(`❌ Error adding team member: ${error.message}`, 'error');
+            }
+        };
+
+        // Show debug information
+        window.showDebugInfo = async function() {
+            const debugDiv = document.getElementById('debug-info');
+            debugDiv.innerHTML = `
+                <h3>🔍 Current Test State</h3>
+                <p><strong>Test Team ID:</strong> ${testTeamId || 'Not created'}</p>
+                <p><strong>Test Invitation ID:</strong> ${testInvitationId || 'Not created'}</p>
+                <p><strong>Test User ID:</strong> ${testUserId || 'Not signed in'}</p>
+                <p><strong>Authentication Status:</strong> ${auth.currentUser ? 'Signed in' : 'Not signed in'}</p>
+                <p><strong>Current User:</strong> ${auth.currentUser?.email || 'None'}</p>
+            `;
+        };
+
+        // Clear logs
+        window.clearLogs = function() {
+            document.getElementById('debug-log').innerHTML = '';
+        };
+
+        // Initialize
+        log('🚀 Test page initialized. Sign in to begin testing.', 'info');
+    </script>
+</body>
+</html>

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { auth, provider } from '../../config';
 import { signInWithPopup } from 'firebase/auth';
 
@@ -7,6 +7,15 @@ const SignIn: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const location = useLocation();
+  
+  // Check if there's a pending invitation
+  useEffect(() => {
+    const pendingInvitationId = sessionStorage.getItem('pendingInvitationId');
+    if (pendingInvitationId && location.state?.from === 'invitation') {
+      console.log('📧 SignIn: Found pending invitation:', pendingInvitationId);
+    }
+  }, [location.state]);
 
   const handleGoogleSignIn = async () => {
     setLoading(true);
@@ -14,7 +23,16 @@ const SignIn: React.FC = () => {
     
     try {
       await signInWithPopup(auth, provider);
-      navigate('/dashboard');
+      
+      // Check if there's a pending invitation to redirect to
+      const pendingInvitationId = sessionStorage.getItem('pendingInvitationId');
+      if (pendingInvitationId) {
+        console.log('📧 SignIn: Redirecting to pending invitation after login');
+        sessionStorage.removeItem('pendingInvitationId');
+        navigate(`/invite/accept/${pendingInvitationId}`);
+      } else {
+        navigate('/dashboard');
+      }
     } catch (error: any) {
       console.error('Sign-in error:', error);
       setError(error.message || 'Failed to sign in. Please try again.');
@@ -44,6 +62,15 @@ const SignIn: React.FC = () => {
           {error && (
             <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
               <p className="text-red-600 dark:text-red-400 text-sm">{error}</p>
+            </div>
+          )}
+
+          {/* Invitation Message */}
+          {location.state?.from === 'invitation' && (
+            <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+              <p className="text-blue-600 dark:text-blue-400 text-sm">
+                {location.state.message || 'Please sign in to accept your team invitation'}
+              </p>
             </div>
           )}
 

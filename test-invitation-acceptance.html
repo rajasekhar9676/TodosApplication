@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Invitation Acceptance - Step by Step</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
+        .container { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .section { margin: 20px 0; padding: 20px; border: 2px solid #e0e0e0; border-radius: 10px; }
+        .success { color: #28a745; font-weight: bold; }
+        .error { color: #dc3545; font-weight: bold; }
+        .warning { color: #ffc107; font-weight: bold; }
+        .info { color: #17a2b8; font-weight: bold; }
+        button { padding: 12px 24px; margin: 8px; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold; }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-warning { background: #ffc107; color: black; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn-info { background: #17a2b8; color: white; }
+        .highlight { background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107; margin: 15px 0; }
+        .step-box { background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 10px 0; border: 1px solid #dee2e6; }
+        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; font-size: 12px; }
+        input { padding: 8px; margin: 5px; border: 1px solid #ddd; border-radius: 4px; width: 300px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Test Invitation Acceptance - Step by Step</h1>
+        
+        <div class="highlight">
+            <h3>🎯 Your Situation:</h3>
+            <p>You're using the <strong>same email</strong> for both sending invitations and logging in: <code>digital@educationtoday.co</code></p>
+            <p>But your dashboard still shows <strong>teams: []</strong> (empty array)</p>
+            <p>This means the invitation acceptance process is failing somewhere</p>
+        </div>
+        
+        <div class="section">
+            <h2>1. 🔐 Sign In</h2>
+            <button onclick="signIn()" class="btn-primary">Sign In with Google</button>
+            <div id="signin-result"></div>
+        </div>
+        
+        <div class="section">
+            <h2>2. 🔍 Find Your Invitation</h2>
+            <button onclick="findMyInvitation()" class="btn-success">Find My Invitation</button>
+            <div id="invitation-result"></div>
+        </div>
+        
+        <div class="section">
+            <h2>3. ✅ Test Invitation Acceptance</h2>
+            <p>Enter the invitation ID from step 2:</p>
+            <input type="text" id="invitation-id" placeholder="Enter invitation ID here">
+            <button onclick="testAcceptInvitation()" class="btn-warning">Test Accept Invitation</button>
+            <div id="accept-result"></div>
+        </div>
+        
+        <div class="section">
+            <h2>4. 🔍 Check What Happened</h2>
+            <button onclick="checkUserProfile()" class="btn-info">Check My Profile After Acceptance</button>
+            <div id="profile-result"></div>
+        </div>
+        
+        <div class="highlight">
+            <h3>📋 What This Test Will Show:</h3>
+            <ol>
+                <li><strong>Step 1:</strong> Confirm you're signed in with the correct email</li>
+                <li><strong>Step 2:</strong> Find the invitation that was sent to your email</li>
+                <li><strong>Step 3:</strong> Test the exact acceptance process that's failing</li>
+                <li><strong>Step 4:</strong> See if the team was actually added to your profile</li>
+            </ol>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-app.js';
+        import { getFirestore, doc, getDoc, updateDoc, setDoc, collection, query, where, getDocs } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-firestore.js';
+        import { getAuth, signInWithPopup, GoogleAuthProvider } from 'https://www.gstatic.com/firebasejs/10.0.0/firebase-auth.js';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBGjoRRDjXLsmX-hxdQEKez4CxHkIbCcWU",
+            authDomain: "steam-outlet-425507-t1.firebaseapp.com",
+            projectId: "steam-outlet-425507-t1",
+            storageBucket: "steam-outlet-425507-t1.firebasestorage.app",
+            messagingSenderId: "925599253452",
+            appId: "1:925599253452:web:d4abc6968b07bb95131369",
+            measurementId: "G-3YPK4FWRH9"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+        const provider = new GoogleAuthProvider();
+
+        let currentUser = null;
+
+        // Sign in
+        async function signIn() {
+            try {
+                const result = document.getElementById('signin-result');
+                result.innerHTML = '<p>Signing in...</p>';
+                
+                const authResult = await signInWithPopup(auth, provider);
+                currentUser = authResult.user;
+                
+                result.innerHTML = `
+                    <p class="success">✅ Signed in successfully!</p>
+                    <div class="step-box">
+                        <p><strong>User ID:</strong> ${currentUser.uid}</p>
+                        <p><strong>Email:</strong> ${currentUser.email}</p>
+                        <p><strong>Display Name:</strong> ${currentUser.displayName || 'None'}</p>
+                    </div>
+                    <p class="info">Now click "Find My Invitation" to see what invitations exist for your email!</p>
+                `;
+                
+                console.log('✅ Signed in as:', currentUser.email);
+                
+            } catch (error) {
+                document.getElementById('signin-result').innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                console.error('Sign in error:', error);
+            }
+        };
+
+        // Find invitation for current user
+        async function findMyInvitation() {
+            try {
+                if (!currentUser && auth.currentUser) {
+                    currentUser = auth.currentUser;
+                }
+                
+                if (!currentUser) {
+                    document.getElementById('invitation-result').innerHTML = '<p class="warning">⚠️ Please sign in first</p>';
+                    return;
+                }
+                
+                const result = document.getElementById('invitation-result');
+                result.innerHTML = '<p>🔍 Searching for invitations for your email...</p>';
+                
+                // Search for invitations by email
+                const invitationsQuery = query(
+                    collection(db, 'invitations'),
+                    where('email', '==', currentUser.email)
+                );
+                
+                const invitationsSnap = await getDocs(invitationsQuery);
+                
+                if (!invitationsSnap.empty) {
+                    const invitations = [];
+                    invitationsSnap.forEach(doc => {
+                        invitations.push({ id: doc.id, ...doc.data() });
+                    });
+                    
+                    result.innerHTML = `
+                        <p class="success">✅ Found ${invitations.length} invitation(s) for your email (${currentUser.email}):</p>
+                        ${invitations.map(inv => `
+                            <div class="step-box">
+                                <h4>📧 ${inv.teamName}</h4>
+                                <p><strong>Invitation ID:</strong> <code>${inv.id}</code></p>
+                                <p><strong>Team ID:</strong> ${inv.teamId}</p>
+                                <p><strong>Email:</strong> ${inv.email}</p>
+                                <p><strong>Status:</strong> ${inv.status}</p>
+                                <p><strong>Role:</strong> ${inv.role}</p>
+                                <p><strong>Invited By:</strong> ${inv.invitedByName}</p>
+                                ${inv.status === 'pending' ? 
+                                    '<p class="success"><strong>✅ This invitation is ready to accept!</strong></p>' : 
+                                    inv.status === 'accepted' ? 
+                                        '<p class="warning"><strong>⚠️ This invitation was already accepted</strong></p>' : 
+                                        '<p class="error"><strong>❌ This invitation was declined</strong></p>'
+                                }
+                            </div>
+                        `).join('')}
+                        <div class="highlight">
+                            <p><strong>📋 Next Step:</strong> Copy one of the Invitation IDs above and paste it in the input field below, then click "Test Accept Invitation"</p>
+                        </div>
+                    `;
+                    
+                    console.log('Found invitations:', invitations);
+                } else {
+                    result.innerHTML = `
+                        <p class="warning">⚠️ No invitations found for your email (${currentUser.email})</p>
+                        <p>This means either:</p>
+                        <ul>
+                            <li>No invitations were sent to this email</li>
+                            <li>All invitations have expired or been processed</li>
+                            <li>There's a data inconsistency</li>
+                        </ul>
+                    `;
+                }
+                
+            } catch (error) {
+                document.getElementById('invitation-result').innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                console.error('Error finding invitations:', error);
+            }
+        };
+
+        // Test invitation acceptance
+        async function testAcceptInvitation() {
+            try {
+                if (!currentUser && auth.currentUser) {
+                    currentUser = auth.currentUser;
+                }
+                
+                if (!currentUser) {
+                    document.getElementById('accept-result').innerHTML = '<p class="warning">⚠️ Please sign in first</p>';
+                    return;
+                }
+                
+                const invitationId = document.getElementById('invitation-id').value.trim();
+                if (!invitationId) {
+                    document.getElementById('accept-result').innerHTML = '<p class="warning">⚠️ Please enter an invitation ID</p>';
+                    return;
+                }
+                
+                const result = document.getElementById('accept-result');
+                result.innerHTML = '<p>🔄 Testing invitation acceptance...</p>';
+                
+                console.log('🧪 Testing acceptance of invitation:', invitationId);
+                console.log('🧪 User ID:', currentUser.uid);
+                console.log('🧪 User email:', currentUser.email);
+                
+                // Step 1: Get invitation details
+                console.log('🧪 Step 1: Getting invitation details...');
+                const invitationRef = doc(db, 'invitations', invitationId);
+                const invitationSnap = await getDoc(invitationRef);
+                
+                if (!invitationSnap.exists()) {
+                    result.innerHTML = '<p class="error">❌ Invitation not found</p>';
+                    return;
+                }
+                
+                const invitation = invitationSnap.data();
+                console.log('🧪 Invitation data:', invitation);
+                
+                // Validate invitation
+                if (!invitation.teamId || !invitation.teamName || !invitation.email) {
+                    result.innerHTML = '<p class="error">❌ Invalid invitation data</p>';
+                    return;
+                }
+                
+                if (invitation.status !== 'pending') {
+                    result.innerHTML = `<p class="error">❌ Invitation status is not pending: ${invitation.status}</p>`;
+                    return;
+                }
+                
+                // Step 2: Update invitation status
+                console.log('🧪 Step 2: Updating invitation status...');
+                await updateDoc(invitationRef, { 
+                    status: 'accepted',
+                    acceptedAt: new Date(),
+                    acceptedBy: currentUser.uid
+                });
+                console.log('✅ Invitation status updated');
+                
+                // Step 3: Add user to team
+                console.log('🧪 Step 3: Adding user to team...');
+                const teamRef = doc(db, 'teams', invitation.teamId);
+                const teamSnap = await getDoc(teamRef);
+                
+                if (!teamSnap.exists()) {
+                    result.innerHTML = '<p class="error">❌ Team not found</p>';
+                    return;
+                }
+                
+                const teamData = teamSnap.data();
+                const currentMembers = teamData.members || [];
+                
+                // Check if user is already a member
+                const isAlreadyMember = currentMembers.some((member) => member.uid === currentUser.uid);
+                
+                if (!isAlreadyMember) {
+                    const newMember = {
+                        uid: currentUser.uid,
+                        role: invitation.role,
+                        email: invitation.email,
+                        displayName: invitation.invitedByName,
+                        joinedAt: new Date(),
+                        invitedBy: invitation.invitedBy
+                    };
+                    
+                    await updateDoc(teamRef, {
+                        members: [...currentMembers, newMember]
+                    });
+                    console.log('✅ User added to team');
+                } else {
+                    console.log('ℹ️ User is already a team member');
+                }
+                
+                // Step 4: Add team to user's profile
+                console.log('🧪 Step 4: Adding team to user profile...');
+                const userRef = doc(db, 'users', currentUser.uid);
+                const userSnap = await getDoc(userRef);
+                
+                if (userSnap.exists()) {
+                    const userData = userSnap.data();
+                    const updatedTeams = [...(userData?.teams || []), invitation.teamId];
+                    
+                    await updateDoc(userRef, { 
+                        teams: updatedTeams,
+                        lastUpdated: new Date()
+                    });
+                    console.log('✅ Team added to user profile');
+                } else {
+                    // Create user document
+                    await setDoc(userRef, {
+                        uid: currentUser.uid,
+                        email: invitation.email,
+                        teams: [invitation.teamId],
+                        createdAt: new Date(),
+                        lastUpdated: new Date()
+                    });
+                    console.log('✅ User document created with team');
+                }
+                
+                result.innerHTML = `
+                    <p class="success">🎉 Invitation acceptance test completed successfully!</p>
+                    <div class="step-box">
+                        <p><strong>Team:</strong> ${invitation.teamName}</p>
+                        <p><strong>Team ID:</strong> ${invitation.teamId}</p>
+                        <p><strong>Role:</strong> ${invitation.role}</p>
+                    </div>
+                    <p class="info">Now click "Check My Profile After Acceptance" to verify the team was added!</p>
+                `;
+                
+                console.log('✅ Invitation acceptance test completed');
+                
+            } catch (error) {
+                document.getElementById('accept-result').innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                console.error('Error testing invitation acceptance:', error);
+            }
+        };
+
+        // Check user profile after acceptance
+        async function checkUserProfile() {
+            try {
+                if (!currentUser && auth.currentUser) {
+                    currentUser = auth.currentUser;
+                }
+                
+                if (!currentUser) {
+                    document.getElementById('profile-result').innerHTML = '<p class="warning">⚠️ Please sign in first</p>';
+                    return;
+                }
+                
+                const result = document.getElementById('profile-result');
+                result.innerHTML = '<p>🔍 Checking your profile...</p>';
+                
+                const userRef = doc(db, 'users', currentUser.uid);
+                const userSnap = await getDoc(userRef);
+                
+                if (userSnap.exists()) {
+                    const userData = userSnap.data();
+                    
+                    result.innerHTML = `
+                        <p class="success">✅ Profile found!</p>
+                        <div class="step-box">
+                            <h4>📋 Your Profile:</h4>
+                            <p><strong>Email:</strong> ${userData.email}</p>
+                            <p><strong>Display Name:</strong> ${userData.displayName || 'None'}</p>
+                            <p><strong>Role:</strong> ${userData.role || 'None'}</p>
+                        </div>
+                        <div class="step-box">
+                            <h4>🏗️ Teams Status:</h4>
+                            <p><strong>teams field:</strong> ${userData.teams ? `${userData.teams.length} teams: [${userData.teams.join(', ')}]` : 'undefined/missing'}</p>
+                            <p><strong>joinedTeams field:</strong> ${userData.joinedTeams ? `${userData.joinedTeams.length} teams: [${userData.joinedTeams.join(', ')}]` : 'undefined/missing'}</p>
+                        </div>
+                        ${userData.teams && userData.teams.length > 0 ? 
+                            '<p class="success">🎉 SUCCESS! You now have teams in your profile. Go back to your dashboard!</p>' : 
+                            '<p class="error">❌ FAILURE! No teams found in your profile. The acceptance process failed.</p>'
+                        }
+                    `;
+                } else {
+                    result.innerHTML = '<p class="error">❌ No user document found</p>';
+                }
+                
+            } catch (error) {
+                document.getElementById('profile-result').innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                console.error('Error checking profile:', error);
+            }
+        };
+
+        // Auto-sign in if already authenticated
+        auth.onAuthStateChanged((user) => {
+            if (user && !currentUser) {
+                currentUser = user;
+                console.log('Auto-detected signed in user:', user.email);
+            }
+        });
+
+        // Make functions globally accessible
+        window.signIn = signIn;
+        window.findMyInvitation = findMyInvitation;
+        window.testAcceptInvitation = testAcceptInvitation;
+        window.checkUserProfile = checkUserProfile;
+    </script>
+</body>
+</html>

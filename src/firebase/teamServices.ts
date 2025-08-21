@@ -9,7 +9,7 @@ import {
 } from 'firebase/firestore';
 import { User } from 'firebase/auth';
 
-// Create a new team and update the user's joinedTeams
+// Create a new team and update the user's teams
 export const createTeam = async (teamName: string, currentUser: User) => {
   const teamRef = doc(collection(db, 'teams'));
   await setDoc(teamRef, {
@@ -22,7 +22,7 @@ export const createTeam = async (teamName: string, currentUser: User) => {
 
   const userRef = doc(db, 'users', currentUser.uid);
   await updateDoc(userRef, {
-    joinedTeams: arrayUnion(teamRef.id)
+    teams: arrayUnion(teamRef.id)
   });
 };
 

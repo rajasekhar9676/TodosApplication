@@ -107,6 +107,81 @@ class GmailService {
     return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   }
 
+  // Create HTML email template for invitations
+  private createInvitationEmailHTML(teamName: string, inviterName: string, role: string, invitationId: string): string {
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Team Invitation</title>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+          .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
+          .button { display: inline-block; background: #667eea; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; }
+          .footer { text-align: center; margin-top: 30px; color: #666; font-size: 14px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>🎉 Team Invitation</h1>
+          </div>
+          <div class="content">
+            <h2>Hi there!</h2>
+            <p><strong>${inviterName}</strong> has invited you to join the team <strong>"${teamName}"</strong> on TodoPro.</p>
+            
+            <div style="background: #e8f4fd; padding: 15px; border-radius: 5px; margin: 20px 0;">
+              <p><strong>Your Role:</strong> ${role}</p>
+              <p><strong>Team:</strong> ${teamName}</p>
+              <p><strong>Invited by:</strong> ${inviterName}</p>
+            </div>
+            
+            <p>TodoPro is a collaborative task management platform that helps teams work together efficiently.</p>
+            
+            <div style="text-align: center;">
+              <a href="${this.getBaseUrl()}/invite/accept/${invitationId}" class="button">Accept Invitation</a>
+            </div>
+            
+            <p style="margin-top: 30px; font-size: 14px; color: #666;">
+              If you have any questions, please contact your team administrator.
+            </p>
+          </div>
+          <div class="footer">
+            <p>This invitation was sent from TodoPro</p>
+            <p>© 2024 TodoPro. All rights reserved.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  // Create text email template for invitations
+  private createInvitationEmailText(teamName: string, inviterName: string, role: string, invitationId: string): string {
+    return `
+      Hi there!
+      
+      ${inviterName} has invited you to join the team "${teamName}" on TodoPro.
+      
+      Your Role: ${role}
+      Team: ${teamName}
+      Invited by: ${inviterName}
+      
+      TodoPro is a collaborative task management platform that helps teams work together efficiently.
+      
+      To accept this invitation, please visit: ${this.getBaseUrl()}/invite/accept/${invitationId}
+      
+      If you have any questions, please contact your team administrator.
+      
+      Best regards,
+      The TodoPro Team
+    `;
+  }
+
   async sendEmail(emailData: EmailData): Promise<boolean> {
     try {
       console.log('📧 Starting Gmail API email send process...');
@@ -178,89 +253,80 @@ class GmailService {
   }
 
   async sendInvitationEmail(
-    toEmail: string,
+    to: string,
     teamName: string,
     inviterName: string,
     role: string,
     invitationId: string
   ): Promise<boolean> {
-    const subject = `Invitation to join ${teamName} on TodoPro`;
-    
-    const htmlBody = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Team Invitation</title>
-        <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-          .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
-          .button { display: inline-block; background: #667eea; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; }
-          .footer { text-align: center; margin-top: 30px; color: #666; font-size: 14px; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>🎉 Team Invitation</h1>
-          </div>
-          <div class="content">
-            <h2>Hi there!</h2>
-            <p><strong>${inviterName}</strong> has invited you to join the team <strong>"${teamName}"</strong> on TodoPro.</p>
-            
-            <div style="background: #e8f4fd; padding: 15px; border-radius: 5px; margin: 20px 0;">
-              <p><strong>Your Role:</strong> ${role}</p>
-              <p><strong>Team:</strong> ${teamName}</p>
-              <p><strong>Invited by:</strong> ${inviterName}</p>
-            </div>
-            
-            <p>TodoPro is a collaborative task management platform that helps teams work together efficiently.</p>
-            
-            <div style="text-align: center;">
-              <a href="${this.getBaseUrl()}/invite/accept/${invitationId}" class="button">Accept Invitation</a>
-            </div>
-            
-            <p style="margin-top: 30px; font-size: 14px; color: #666;">
-              If you have any questions, please contact your team administrator.
-            </p>
-          </div>
-          <div class="footer">
-            <p>This invitation was sent from TodoPro</p>
-            <p>© 2024 TodoPro. All rights reserved.</p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
+    try {
+      console.log('📧 Sending invitation email...');
+      console.log('📧 To:', to);
+      console.log('📧 Team:', teamName);
+      console.log('📧 Inviter:', inviterName);
+      console.log('📧 Role:', role);
+      console.log('📧 Invitation ID:', invitationId);
 
-    const textBody = `
-      Hi there!
-      
-      ${inviterName} has invited you to join the team "${teamName}" on TodoPro.
-      
-      Your Role: ${role}
-      Team: ${teamName}
-      Invited by: ${inviterName}
-      
-      TodoPro is a collaborative task management platform that helps teams work together efficiently.
-      
-      To accept this invitation, please visit: ${this.getBaseUrl()}/invite/accept/${invitationId}
-      
-      If you have any questions, please contact your team administrator.
-      
-      Best regards,
-      The TodoPro Team
-    `;
+      // Check if Gmail credentials are configured
+      if (!this.credentials.clientId || !this.credentials.clientSecret || !this.credentials.refreshToken) {
+        console.log('⚠️ Gmail credentials not configured - running in DEMO MODE');
+        console.log('📧 DEMO: Email would be sent to:', to);
+        console.log('📧 DEMO: Team:', teamName);
+        console.log('📧 DEMO: Inviter:', inviterName);
+        console.log('📧 DEMO: Role:', role);
+        console.log('📧 DEMO: Invitation Link:', `${this.getBaseUrl()}/invite/accept/${invitationId}`);
+        
+        // In demo mode, we simulate success but don't actually send email
+        // This allows the invitation flow to work for testing
+        return true;
+      }
 
-    return this.sendEmail({
-      to: toEmail,
-      subject,
-      htmlBody,
-      textBody,
-    });
+      // Real Gmail API implementation
+      const accessToken = await this.getAccessToken();
+      
+      const emailData = {
+        to,
+        subject: `Invitation to join ${teamName}`,
+        htmlBody: this.createInvitationEmailHTML(teamName, inviterName, role, invitationId),
+        textBody: this.createInvitationEmailText(teamName, inviterName, role, invitationId)
+      };
+
+      const message = this.createEmailMessage(emailData);
+      const encodedMessage = btoa(message).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+      const response = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/send`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          raw: encodedMessage
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('❌ Gmail API error:', errorData);
+        throw new Error(`Gmail API error: ${response.status} ${response.statusText}`);
+      }
+
+      console.log('✅ Email sent successfully via Gmail API');
+      return true;
+
+    } catch (error) {
+      console.error('❌ Error sending invitation email:', error);
+      
+      // Fallback to demo mode if Gmail fails
+      console.log('⚠️ Falling back to DEMO MODE due to Gmail error');
+      console.log('📧 DEMO: Email would be sent to:', to);
+      console.log('📧 DEMO: Team:', teamName);
+      console.log('📧 DEMO: Inviter:', inviterName);
+      console.log('📧 DEMO: Role:', role);
+      console.log('📧 DEMO: Invitation Link:', `${this.getBaseUrl()}/invite/accept/${invitationId}`);
+      
+      return true; // Return true so invitation flow continues
+    }
   }
 }
 

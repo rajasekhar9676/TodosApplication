@@ -13,8 +13,16 @@ service cloud.firestore {
          resource.data.createdBy == request.auth.uid);
     }
     
+    // Users can create invitations for teams they belong to
     // Users can read invitations sent to their email
     match /invitations/{invitationId} {
+      // Allow creating invitations if user belongs to the team
+      allow create: if request.auth != null && 
+        exists(/databases/$(database)/documents/teams/$(request.resource.data.teamId)) &&
+        (get(/databases/$(database)/documents/teams/$(request.resource.data.teamId)).data.members[request.auth.uid] != null ||
+         get(/databases/$(database)/documents/teams/$(request.resource.data.teamId)).data.createdBy == request.auth.uid);
+      
+      // Allow reading invitations sent to their email
       allow read: if request.auth != null && 
         (resource.data.email == request.auth.token.email ||
          resource.data.invitedBy == request.auth.uid);

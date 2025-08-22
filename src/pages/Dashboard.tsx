@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { db } from '../config';
 import { doc, getDoc, collection, query, orderBy, limit, addDoc, serverTimestamp, onSnapshot, setDoc, updateDoc, getDocs, where } from 'firebase/firestore';
@@ -52,11 +52,11 @@ const createUserDocument = async (userId: string) => {
 };
 
 // Helper function to fix user document
-const fixUserDocument = async (userId: string) => {
+const fixUserDocument = async (userId: string, currentUserData: any) => {
   try {
     const userRef = doc(db, 'users', userId);
     const updates = {
-      teams: [],
+      teams: currentUserData?.joinedTeams || [],
       lastUpdated: serverTimestamp()
     };
     await updateDoc(userRef, updates);
@@ -69,7 +69,7 @@ const fixUserDocument = async (userId: string) => {
 };
 
 // Helper function to migrate user document from joinedTeams to teams
-const migrateUserDocument = async (userId: string) => {
+const migrateUserDocument = async (userId: string, currentUserData: any) => {
   try {
     const userRef = doc(db, 'users', userId);
     const userSnap = await getDoc(userRef);
@@ -240,151 +240,166 @@ const Dashboard: React.FC = () => {
   const [allTasks, setAllTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Enhanced error handling for data fetching
+  const fetchDashboardData = useCallback(async () => {
+    if (!user?.uid) return;
+    
+    try {
+      console.log('🔄 Dashboard: Starting data fetch for user:', user.uid);
+      
+      // Get user document with better error handling
+      const userDocRef = doc(db, 'users', user.uid);
+      const userDocSnap = await getDoc(userDocRef);
+      
+      if (userDocSnap.exists()) {
+        let userData = userDocSnap.data();
+        console.log('📋 Dashboard: User document exists:', !!userData);
+        console.log('📋 Dashboard: User data:', userData);
+        
+        // Check and fix user document structure
+        if (!userData.teams || !Array.isArray(userData.teams)) {
+          console.log('⚠️ Dashboard: Fixing user teams array...');
+          userData = await fixUserDocument(user.uid, userData);
+        }
+        
+        // Migrate old data if needed
+        if (userData.joinedTeams && userData.joinedTeams.length > 0 && (!userData.teams || userData.teams.length === 0)) {
+          console.log('🔄 Dashboard: Migrating joinedTeams to teams...');
+          await migrateUserDocument(user.uid, userData);
+          // Refresh user data after migration
+          const refreshedUserSnap = await getDoc(doc(db, 'users', user.uid));
+          if (refreshedUserSnap.exists()) {
+            userData = refreshedUserSnap.data();
+          }
+        }
+        
+        console.log('📋 Dashboard: User teams array:', userData.teams);
+        console.log('📋 Dashboard: User joinedTeams array:', userData.joinedTeams);
+        
+                 // Set teams state
+         if (userData.teams && Array.isArray(userData.teams)) {
+           setTeams(userData.teams);
+           
+           // Fetch team details with error handling
+           if (userData.teams.length > 0) {
+             console.log('📋 Dashboard: Fetching teams data for:', userData.teams.length, 'teams');
+             const teamsField = userData.teams.length > 0 ? 'teams' : 'joinedTeams';
+             console.log('📋 Dashboard: Teams field used:', teamsField);
+             
+             try {
+               const teamsData = await Promise.all(
+                 userData.teams.map(async (teamId: string) => {
+                   try {
+                     const teamDocRef = doc(db, 'teams', teamId);
+                     const teamDocSnap = await getDoc(teamDocRef);
+                     if (teamDocSnap.exists()) {
+                       return { id: teamId, ...teamDocSnap.data() };
+                     } else {
+                       console.warn('⚠️ Dashboard: Team not found:', teamId);
+                       return null;
+                     }
+                   } catch (error) {
+                     console.error('❌ Dashboard: Error fetching team:', teamId, error);
+                     return null;
+                   }
+                 })
+               );
+               
+               const validTeams = teamsData.filter(team => team !== null);
+               console.log('📋 Dashboard: Teams data loaded:', validTeams.length, 'teams');
+               console.log('📋 Dashboard: Teams data details:', validTeams);
+               
+               if (validTeams.length > 0) {
+                 // Keep teams as string array for now
+                 console.log('📋 Dashboard: Teams loaded successfully');
+               }
+             } catch (error) {
+               console.error('❌ Dashboard: Error fetching teams data:', error);
+             }
+           }
+         }
+      } else {
+        console.log('📋 Dashboard: User document does not exist, creating...');
+        await createUserDocument(user.uid);
+      }
+    } catch (error) {
+      console.error('❌ Dashboard: Error in fetchDashboardData:', error);
+    }
+  }, [user?.uid]);
+
+  // Enhanced task fetching with error handling
+  const fetchUserTasks = useCallback(async () => {
+    if (!user?.uid || teams.length === 0) return;
+    
+    try {
+      console.log('📋 Dashboard: Fetching tasks for teams:', teams);
+      
+      const allTasks: any[] = [];
+      
+      for (const teamId of teams) {
+        try {
+          const tasksQuery = query(
+            collection(db, 'tasks'), // Use main tasks collection
+            where('teamId', '==', teamId),
+            orderBy('createdAt', 'desc'),
+            limit(50)
+          );
+          
+          const tasksSnap = await getDocs(tasksQuery);
+          const teamTasks = tasksSnap.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
+          
+          console.log(`📋 Dashboard: Team ${teamId} - All tasks: ${teamTasks.length}, User tasks: ${teamTasks.filter((task: any) => task.assignedTo === user.uid).length}`);
+          
+          allTasks.push(...teamTasks);
+        } catch (error) {
+          console.error('❌ Dashboard: Error fetching tasks for team:', teamId, error);
+        }
+      }
+      
+      // Deduplicate tasks and filter user tasks
+      const uniqueTasks = allTasks.filter((task, index, self) => 
+        index === self.findIndex(t => t.id === task.id)
+      );
+      
+      const userTasks = uniqueTasks.filter(task => (task as any).assignedTo === user.uid);
+      console.log('📋 Dashboard: Total user tasks after update:', userTasks.length, '(deduplicated)');
+      
+      setAllTasks(uniqueTasks);
+      
+      // Update stats with error handling
+      try {
+                  const completedTasks = userTasks.filter(task => (task as any).status === 'completed').length;
+          const pendingTasks = userTasks.filter(task => (task as any).status !== 'completed').length;
+        
+        setStats({
+          totalTasks: userTasks.length,
+          completedTasks,
+          pendingTasks,
+          teamsCount: teams.length
+        });
+        
+        console.log('📊 Dashboard: Stats updated:', { totalTasks: userTasks.length, completedTasks, pendingTasks, teamsCount: teams.length });
+      } catch (error) {
+        console.error('❌ Dashboard: Error updating stats:', error);
+        setStats({ totalTasks: 0, completedTasks: 0, pendingTasks: 0, teamsCount: 0 });
+      }
+      
+    } catch (error) {
+      console.error('❌ Dashboard: Error in fetchUserTasks:', error);
+      setAllTasks([]); // Clear tasks on error
+      setStats({ totalTasks: 0, completedTasks: 0, pendingTasks: 0, teamsCount: 0 });
+    }
+  }, [user?.uid, teams]);
+
   useEffect(() => {
     if (!user) return;
 
-    const fetchDashboardData = async () => {
-      try {
-        console.log('🔄 Dashboard: Fetching user data for:', user.uid);
-        
-        // Fetch user's teams
-        const userRef = doc(db, 'users', user.uid);
-        const userSnap = await getDoc(userRef);
-        
-        if (!userSnap.exists()) {
-          console.log('❌ Dashboard: User document not found, creating...');
-          await createUserDocument(user.uid);
-          // Retry after creating document
-          const newUserSnap = await getDoc(userRef);
-          const userData = newUserSnap.data();
-          console.log('✅ Dashboard: Created user document:', userData);
-        }
-        
-        let userData = userSnap.data();
-
-        console.log('📋 Dashboard: User document exists:', userSnap.exists());
-        console.log('📋 Dashboard: User data:', userData);
-        console.log('📋 Dashboard: User teams array:', userData?.teams);
-        console.log('📋 Dashboard: User joinedTeams array:', userData?.joinedTeams);
-        
-        // Check if user document needs fixing
-        if (userData && !userData.teams && !userData.joinedTeams) {
-          console.log('⚠️ Dashboard: User document missing teams fields, fixing...');
-          await fixUserDocument(user.uid);
-        }
-        
-        // Check if user document needs migration from joinedTeams to teams
-        if (userData && userData.joinedTeams && userData.joinedTeams.length > 0 && (!userData.teams || userData.teams.length === 0)) {
-          console.log('🔄 Dashboard: User document needs migration from joinedTeams to teams...');
-          await migrateUserDocument(user.uid);
-          // Refresh user data after migration
-          const updatedUserSnap = await getDoc(userRef);
-          const updatedUserData = updatedUserSnap.data();
-          userData = updatedUserData;
-        }
-
-        // Handle both 'teams' and 'joinedTeams' field names for compatibility
-        const userTeams = userData?.teams || userData?.joinedTeams || [];
-        
-        if (userTeams.length > 0) {
-          console.log('📋 Dashboard: Fetching teams data for:', userTeams.length, 'teams');
-          console.log('📋 Dashboard: Teams field used:', userData?.teams ? 'teams' : 'joinedTeams');
-          
-          const teamPromises = userTeams.map(async (teamId: string) => {
-            const teamRef = doc(db, 'teams', teamId);
-            const teamSnap = await getDoc(teamRef);
-            if (teamSnap.exists()) {
-              return { id: teamId, ...teamSnap.data() } as Team;
-            } else {
-              console.warn('⚠️ Dashboard: Team not found:', teamId);
-              return null;
-            }
-          });
-          
-          const teamsData = (await Promise.all(teamPromises)).filter(Boolean) as Team[];
-          console.log('📋 Dashboard: Teams data loaded:', teamsData.length, 'teams');
-          console.log('📋 Dashboard: Teams data details:', teamsData);
-          
-          setTeams(teamsData);
-          console.log('📋 Dashboard: setTeams called with:', teamsData);
-          setStats(prev => ({ ...prev, teamsCount: teamsData.length }));
-
-          // Set up real-time listeners for user's tasks only
-          const unsubscribeFunctions: (() => void)[] = [];
-          
-          for (const team of teamsData) {
-            // Fetch all team tasks, then filter to show only user's assigned tasks
-            const tasksQuery = query(
-              collection(db, 'teams', team.id, 'tasks'),
-              orderBy('createdAt', 'desc')
-            );
-            
-            const unsubscribe = onSnapshot(tasksQuery, (snapshot) => {
-              const allTeamTasks = snapshot.docs.map(doc => ({ 
-                id: doc.id, 
-                ...doc.data(),
-                teamName: team.name
-              } as Task));
-              
-              // Filter tasks to only show user's tasks
-              const userTasks = allTeamTasks.filter(task => 
-                task.assignedTo === user.uid
-              );
-              
-              console.log(`📋 Dashboard: Team ${team.name} - All tasks: ${allTeamTasks.length}, User tasks: ${userTasks.length}`);
-              
-              // Update all tasks with only user's tasks, ensuring no duplicates
-              setAllTasks(prev => {
-                const otherTeamTasks = prev.filter(task => task.teamId !== team.id);
-                const newAllTasks = [...otherTeamTasks, ...userTasks];
-                
-                // Remove duplicates based on task ID
-                const uniqueTasks = newAllTasks.filter((task, index, self) => 
-                  index === self.findIndex(t => t.id === task.id)
-                );
-                
-                console.log(`📋 Dashboard: Total user tasks after update:`, uniqueTasks.length, '(deduplicated)');
-                return uniqueTasks;
-              });
-            }, (error) => {
-              console.error(`Error listening to team ${team.id} tasks:`, error);
-            });
-            
-            unsubscribeFunctions.push(unsubscribe);
-          }
-
-          // Cleanup all listeners on unmount
-          return () => {
-            unsubscribeFunctions.forEach(unsubscribe => unsubscribe());
-          };
-        }
-
-        // Fetch voice notes with real-time listener
-        const voiceNotesQuery = query(
-          collection(db, 'voiceNotes'),
-          orderBy('createdAt', 'desc'),
-          limit(10)
-        );
-        
-        const unsubscribe = onSnapshot(voiceNotesQuery, (snapshot) => {
-          const voiceNotesData = snapshot.docs
-            .map(doc => ({ id: doc.id, ...doc.data() } as VoiceNote))
-            .filter(note => note.userId === user.uid);
-          setVoiceNotes(voiceNotesData);
-        }, (error) => {
-          console.error('Error listening to voice notes:', error);
-        });
-
-        // Cleanup listener on unmount
-        return () => unsubscribe();
-      } catch (error) {
-        console.error('Error fetching dashboard data:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
+    // Fetch user's teams and tasks
     fetchDashboardData();
+    fetchUserTasks();
 
     // Set up real-time listener for user's teams array
     if (user) {
@@ -408,7 +423,7 @@ const Dashboard: React.FC = () => {
 
       return () => unsubscribeUser();
     }
-  }, [user]);
+  }, [user, fetchDashboardData, fetchUserTasks, teams]);
 
   // Add a refresh function for manual updates
   const refreshDashboard = async () => {
@@ -751,7 +766,7 @@ const Dashboard: React.FC = () => {
                     Fix User Document
                   </button>
                   <button
-                    onClick={() => migrateUserDocument(user?.uid || '')}
+                    onClick={() => migrateUserDocument(user?.uid || '', { teams: teams, joinedTeams: [] })}
                     disabled={loading}
                     className="inline-flex items-center bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50"
                   >

@@ -86,3 +86,4 @@ If you continue having issues:
 2. Verify all credentials are correct
 3. Ensure Gmail API is enabled in Google Cloud Console
 4. Check if your Google account has 2FA enabled
+

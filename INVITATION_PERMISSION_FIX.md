@@ -117,3 +117,4 @@ match /invitations/{invitationId} {
 **Status**: ✅ **Fixed**  
 **Priority**: 🔴 **High**  
 **Impact**: Users can now accept team invitations
+

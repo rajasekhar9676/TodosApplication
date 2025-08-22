@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple App Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .test-button:hover {
+            background: #0056b3;
+        }
+        .result {
+            background: #f8f9fa;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            border-left: 4px solid #007bff;
+        }
+        .error {
+            border-left-color: #dc3545;
+            background: #f8d7da;
+        }
+        .success {
+            border-left-color: #28a745;
+            background: #d4edda;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Simple App Test</h1>
+    <p>This page tests basic functionality to identify where the errors are occurring.</p>
+
+    <div class="test-section">
+        <h2>1. Basic JavaScript Test</h2>
+        <button class="test-button" onclick="testBasicJS()">Test Basic JavaScript</button>
+        <div id="basic-js-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>2. Firebase Config Test</h2>
+        <button class="test-button" onclick="testFirebaseConfig()">Test Firebase Config</button>
+        <div id="firebase-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>3. React App Test</h2>
+        <button class="test-button" onclick="testReactApp()">Test React App</button>
+        <div id="react-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>4. Navigation Test</h2>
+        <button class="test-button" onclick="testNavigation()">Test Navigation</button>
+        <div id="navigation-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>5. Error Boundary Test</h2>
+        <button class="test-button" onclick="testErrorBoundary()">Test Error Boundary</button>
+        <div id="error-boundary-result" class="result"></div>
+    </div>
+
+    <script>
+        function showResult(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.textContent = message;
+            element.className = `result ${type}`;
+        }
+
+        function testBasicJS() {
+            try {
+                // Test basic JavaScript functionality
+                const testArray = [1, 2, 3];
+                const doubled = testArray.map(x => x * 2);
+                const sum = doubled.reduce((a, b) => a + b, 0);
+                
+                if (sum === 12) {
+                    showResult('basic-js-result', '✅ Basic JavaScript working correctly. Array operations, arrow functions, and reduce working.', 'success');
+                } else {
+                    showResult('basic-js-result', '❌ Basic JavaScript test failed. Expected sum 12, got ' + sum, 'error');
+                }
+            } catch (error) {
+                showResult('basic-js-result', '❌ Basic JavaScript error: ' + error.message, 'error');
+            }
+        }
+
+        function testFirebaseConfig() {
+            try {
+                // Check if Firebase is available
+                if (typeof firebase !== 'undefined') {
+                    showResult('firebase-result', '✅ Firebase is available in global scope.', 'success');
+                } else {
+                    showResult('firebase-result', '⚠️ Firebase not found in global scope. This is normal for React apps.', 'info');
+                }
+            } catch (error) {
+                showResult('firebase-result', '❌ Firebase test error: ' + error.message, 'error');
+            }
+        }
+
+        function testReactApp() {
+            try {
+                // Check if React app is running
+                const appElement = document.getElementById('root');
+                if (appElement) {
+                    showResult('react-result', '✅ React app root element found.', 'success');
+                    
+                    // Check if app has content
+                    if (appElement.children.length > 0) {
+                        showResult('react-result', '✅ React app has content and appears to be running.', 'success');
+                    } else {
+                        showResult('react-result', '⚠️ React app root found but no content detected.', 'info');
+                    }
+                } else {
+                    showResult('react-result', '❌ React app root element not found.', 'error');
+                }
+            } catch (error) {
+                showResult('react-result', '❌ React app test error: ' + error.message, 'error');
+            }
+        }
+
+        function testNavigation() {
+            try {
+                // Test if we can access navigation functions
+                if (typeof window !== 'undefined') {
+                    showResult('navigation-result', '✅ Window object accessible. Testing navigation...', 'info');
+                    
+                    // Test if we can change location
+                    const currentPath = window.location.pathname;
+                    showResult('navigation-result', `✅ Current path: ${currentPath}. Navigation should work.`, 'success');
+                } else {
+                    showResult('navigation-result', '❌ Window object not accessible.', 'error');
+                }
+            } catch (error) {
+                showResult('navigation-result', '❌ Navigation test error: ' + error.message, 'error');
+            }
+        }
+
+        function testErrorBoundary() {
+            try {
+                // Test if error boundary component exists
+                const errorBoundaryTest = () => {
+                    throw new Error('Test error for error boundary');
+                };
+                
+                // This should trigger an error
+                errorBoundaryTest();
+                showResult('error-boundary-result', '❌ Error boundary not catching errors as expected.', 'error');
+            } catch (error) {
+                showResult('error-boundary-result', '✅ Error caught successfully: ' + error.message, 'success');
+            }
+        }
+
+        // Auto-run basic tests
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                testBasicJS();
+                testFirebaseConfig();
+                testReactApp();
+                testNavigation();
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

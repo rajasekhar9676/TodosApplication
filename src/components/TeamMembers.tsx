@@ -217,3 +217,4 @@ const TeamMembers: React.FC<TeamMembersProps> = ({
 };
 
 export default TeamMembers;
+

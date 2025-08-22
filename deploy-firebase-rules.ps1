@@ -55,3 +55,4 @@ if ($LASTEXITCODE -eq 0) {
 }
 
 Write-Host "🚀 Deployment complete! Try accepting an invitation now." -ForegroundColor Green
+

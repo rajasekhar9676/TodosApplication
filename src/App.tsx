@@ -3,6 +3,12 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout from './components/layout/Layout';
 import SignIn from './pages/auth/SignIn';
+import SimpleAuth from './components/SimpleAuth';
+import ManualLogin from './components/ManualLogin';
+import ManualRegistration from './components/ManualRegistration';
+import TypeSafeDashboard from './components/TypeSafeDashboard';
+import MinimalDashboard from './components/MinimalDashboard';
+import SimpleDashboard from './components/SimpleDashboard';
 import Dashboard from './pages/Dashboard';
 import Teams from './pages/Teams';
 import TeamDetail from './pages/TeamDetail';
@@ -10,6 +16,13 @@ import Tasks from './pages/Tasks';
 import Calendar from './pages/Calendar';
 import VoiceRecordings from './pages/VoiceRecordings';
 import InviteAccept from './pages/InviteAccept';
+import SimpleWhatsAppReminder from './components/SimpleWhatsAppReminder';
+import WhatsAppReminder from './components/WhatsAppReminder';
+import AdminDashboard from './components/AdminDashboard';
+import AdminLogin from './components/AdminLogin';
+import DebugPage from './components/DebugPage';
+import ErrorLogger from './components/ErrorLogger';
+import ErrorBoundary from './components/ErrorBoundary';
 
 const AppContent: React.FC = () => {
   const { user, loading } = useAuth();
@@ -25,39 +38,55 @@ const AppContent: React.FC = () => {
     );
   }
 
-  if (!user) {
-    return (
-      <Routes>
-        <Route path="/login" element={<SignIn />} />
-        <Route path="/invite/accept/:invitationId" element={<InviteAccept />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
-      </Routes>
-    );
-  }
-
   return (
-    <Layout>
-      <Routes>
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/teams" element={<Teams />} />
-        <Route path="/teams/:teamId" element={<TeamDetail />} />
-        <Route path="/tasks" element={<Tasks />} />
-        <Route path="/calendar" element={<Calendar />} />
-        <Route path="/voice-recordings" element={<VoiceRecordings />} />
-        <Route path="/invite/accept/:invitationId" element={<InviteAccept />} />
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
-    </Layout>
+    <Routes>
+      {/* Admin routes - completely separate from Layout and authentication */}
+      <Route path="/admin_login" element={<AdminLogin />} />
+      <Route path="/admin_dashboard" element={<AdminDashboard />} />
+      
+      {/* User routes - require authentication */}
+      {!user ? (
+        <>
+          <Route path="/login" element={<SimpleAuth />} />
+          <Route path="/signin" element={<SignIn />} />
+          <Route path="/manual-login" element={<ManualLogin />} />
+          <Route path="/register" element={<ManualRegistration />} />
+          <Route path="/invite/accept/:invitationId" element={<InviteAccept />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </>
+      ) : (
+        <Route path="*" element={
+          <Layout>
+            <Routes>
+              <Route path="/dashboard" element={<TypeSafeDashboard />} />
+              <Route path="/teams" element={<Teams />} />
+              <Route path="/teams/:teamId" element={<TeamDetail />} />
+              <Route path="/tasks" element={<Tasks />} />
+              <Route path="/calendar" element={<Calendar />} />
+              <Route path="/voice-recordings" element={<VoiceRecordings />} />
+              <Route path="/whatsapp-reminders" element={<SimpleWhatsAppReminder />} />
+              <Route path="/debug" element={<DebugPage />} />
+              <Route path="/invite/accept/:invitationId" element={<InviteAccept />} />
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            </Routes>
+          </Layout>
+        } />
+      )}
+    </Routes>
   );
 };
 
 const App: React.FC = () => (
-  <AuthProvider>
-    <Router>
-      <AppContent />
-    </Router>
-  </AuthProvider>
+  <ErrorBoundary>
+    <ErrorLogger>
+      <AuthProvider>
+        <Router>
+          <AppContent />
+        </Router>
+      </AuthProvider>
+    </ErrorLogger>
+  </ErrorBoundary>
 );
 
 export default App;

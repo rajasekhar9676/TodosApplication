@@ -158,3 +158,4 @@ When reporting issues, include:
 **Status**: 🔍 **Under Investigation**
 **Priority**: 🔴 **High**
 **Impact**: Users cannot join teams via invitations
+

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AdminAuthService } from '../services/adminAuthService';
+import { adminWhatsAppService } from '../services/adminWhatsAppService';
 import { db } from '../config';
 import { collection, getDocs, doc, getDoc, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 
@@ -39,7 +40,7 @@ interface TaskData {
   id: string;
   title: string;
   description: string;
-  teamId: string;
+  teamId: string | null;
   teamName: string;
   assignedTo: string;
   assignedToName: string;
@@ -110,6 +111,8 @@ const AdminDashboard: React.FC = () => {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   
+
+  
   // Dark theme state
   const [isDarkTheme, setIsDarkTheme] = useState(false);
 
@@ -119,6 +122,12 @@ const AdminDashboard: React.FC = () => {
       navigate('/admin_login');
       return;
     }
+    
+    // Initialize WhatsApp service
+    const apiKey = process.env.REACT_APP_DOUBLE_TICK_API_KEY || 'key_XAKKhG3Xdz';
+    
+    // Initialize WhatsApp service
+    adminWhatsAppService.initialize(apiKey);
     
     // Load data when admin is authenticated
     loadAdminData();
@@ -637,19 +646,27 @@ const AdminDashboard: React.FC = () => {
 
       // Always try to create real task in Firestore first
       try {
-        const teamDoc = await getDoc(doc(db, 'teams', createTaskForm.teamId));
-        const teamData = teamDoc.data();
+        // Only fetch team data if teamId is provided
+        let teamData = null;
+        if (createTaskForm.teamId && createTaskForm.teamId.trim() !== '') {
+          const teamDoc = await getDoc(doc(db, 'teams', createTaskForm.teamId));
+          teamData = teamDoc.data();
+        }
         
-        const userDoc = await getDoc(doc(db, 'users', createTaskForm.assignedTo));
-        const userData = userDoc.data();
+        // Only fetch user data if assignedTo is provided
+        let userData = null;
+        if (createTaskForm.assignedTo && createTaskForm.assignedTo.trim() !== '') {
+          const userDoc = await getDoc(doc(db, 'users', createTaskForm.assignedTo));
+          userData = userDoc.data();
+        }
 
         const newTask = {
           title: createTaskForm.title,
           description: createTaskForm.description,
-          teamId: createTaskForm.teamId,
-          teamName: teamData?.name || 'Unknown Team',
-          assignedTo: createTaskForm.assignedTo,
-          assignedToName: userData?.displayName || 'Unknown User',
+          teamId: createTaskForm.teamId || null,
+          teamName: teamData?.name || 'No Team',
+          assignedTo: createTaskForm.assignedTo || null,
+          assignedToName: userData?.displayName || 'Team Task',
           status: 'todo',
           priority: createTaskForm.priority,
           dueDate: createTaskForm.dueDate ? new Date(createTaskForm.dueDate) : null,
@@ -659,6 +676,54 @@ const AdminDashboard: React.FC = () => {
 
         const docRef = await addDoc(collection(db, 'tasks'), newTask);
         console.log('✅ Admin: Task created successfully in Firestore with ID:', docRef.id);
+        
+        // Send WhatsApp notification
+        try {
+          console.log('📱 Admin: Sending WhatsApp notification for new task...');
+          console.log('📱 Admin: Task details:', {
+            title: newTask.title,
+            assignedTo: newTask.assignedTo,
+            assignedToName: newTask.assignedToName,
+            teamName: newTask.teamName
+          });
+          
+          // Only send WhatsApp notification for individual tasks (when assignedTo is provided)
+          if (newTask.assignedTo) {
+            const notificationData = {
+              taskId: docRef.id,
+              taskTitle: newTask.title,
+              taskDescription: newTask.description,
+              teamId: newTask.teamId,
+              teamName: newTask.teamName,
+              assignedTo: newTask.assignedTo, // This is guaranteed to be string here
+              assignedToName: newTask.assignedToName,
+              priority: newTask.priority,
+              dueDate: newTask.dueDate || new Date(),
+              taskLink: `${window.location.origin}/task/${docRef.id}`,
+              createdAt: new Date()
+            };
+            
+            console.log('📱 Admin: Notification data prepared:', notificationData);
+            
+            const result = await adminWhatsAppService.sendTaskCreationNotification(
+              notificationData,
+              newTask.assignedTo
+            );
+            
+            console.log('📱 Admin: WhatsApp service response:', result);
+            
+            if (result.success) {
+              console.log('✅ Admin: WhatsApp notification sent successfully');
+            } else {
+              console.log('⚠️ Admin: WhatsApp notification failed:', result.message);
+            }
+          } else {
+            console.log('📱 Admin: Skipping WhatsApp notification for team task (no individual assignee)');
+          }
+          
+        } catch (whatsappError) {
+          console.error('❌ Admin: Error sending WhatsApp notification:', whatsappError);
+        }
         
         // Clear form
         setCreateTaskForm({
@@ -674,7 +739,8 @@ const AdminDashboard: React.FC = () => {
         
         // Show success message
         const taskType = viewMode === 'create-individual-task' ? 'Individual Task' : 'Group Task';
-        setSuccessMessage(`${taskType} created successfully! 🎉`);
+        const notificationText = newTask.assignedTo ? ' WhatsApp notification sent.' : '';
+        setSuccessMessage(`${taskType} created successfully!${notificationText} 📱`);
         setShowSuccessModal(true);
         
         // Refresh data to show new task
@@ -684,15 +750,15 @@ const AdminDashboard: React.FC = () => {
         console.error('❌ Admin: Failed to create task in Firestore:', firestoreError);
         
         // If Firestore fails, create locally and show warning
-        const team = teams.find(t => t.id === createTaskForm.teamId);
+        const team = createTaskForm.teamId ? teams.find(t => t.id === createTaskForm.teamId) : null;
         const user = users.find(u => u.id === createTaskForm.assignedTo);
         
         const newTask: TaskData = {
           id: `local-task-${Date.now()}`,
           title: createTaskForm.title,
           description: createTaskForm.description,
-          teamId: createTaskForm.teamId,
-          teamName: team?.name || 'Unknown Team',
+          teamId: createTaskForm.teamId || null,
+          teamName: team?.name || 'No Team',
           assignedTo: createTaskForm.assignedTo,
           assignedToName: user?.displayName || 'Unknown User',
           status: 'todo',
@@ -717,12 +783,14 @@ const AdminDashboard: React.FC = () => {
             : u
         ));
         
-        // Update team task counts
-        setTeams(prev => prev.map(t => 
-          t.id === createTaskForm.teamId 
-            ? { ...t, totalTasks: t.totalTasks + 1 }
-            : t
-        ));
+        // Update team task counts (only if teamId exists)
+        if (createTaskForm.teamId) {
+          setTeams(prev => prev.map(t => 
+            t.id === createTaskForm.teamId 
+              ? { ...t, totalTasks: t.totalTasks + 1 }
+              : t
+          ));
+        }
         
         setCreateTaskForm({
           title: '',
@@ -908,10 +976,12 @@ const AdminDashboard: React.FC = () => {
                <span className="text-lg lg:text-xl mr-3">🏢</span>
                Create Team
              </button>
-          </nav>
+                    </nav>
+          
+
           
           {/* Logout Section */}
-                     <div className={`mt-8 lg:mt-12 pt-6 lg:pt-8 border-t ${isDarkTheme ? 'border-gray-600' : 'border-gray-200'}`}>
+          <div className={`mt-8 lg:mt-12 pt-6 lg:pt-8 border-t ${isDarkTheme ? 'border-gray-600' : 'border-gray-200'}`}>
                          <button
                onClick={handleLogout}
                className={`w-full px-4 lg:px-6 py-3 lg:py-4 rounded-xl transition-all duration-200 text-white font-semibold text-base lg:text-lg shadow-lg hover:shadow-xl ${
@@ -953,6 +1023,9 @@ const AdminDashboard: React.FC = () => {
                     >
                       {isDarkTheme ? '🌞' : '🌙'}
                     </button>
+                    
+
+                    
                     <button
                       onClick={loadAdminData}
                       className="px-4 lg:px-6 py-2 lg:py-3 bg-white/20 hover:bg-white/30 rounded-xl transition-all duration-200 text-white font-medium shadow-lg hover:shadow-xl text-sm lg:text-base"
@@ -1054,6 +1127,8 @@ const AdminDashboard: React.FC = () => {
                     </div>
                   </div>
                 </div>
+                
+
             </div>
             
                                      {/* Quick Actions */}

@@ -87,3 +87,8 @@ After enabling Email/Password authentication:
 4. **Customize the UI further** if needed
 
 The app is working well with Google authentication. The manual authentication issue is just a Firebase configuration setting that needs to be enabled.
+
+
+
+
+

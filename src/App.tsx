@@ -21,6 +21,7 @@ import WhatsAppReminder from './components/WhatsAppReminder';
 import AdminDashboard from './components/AdminDashboard';
 import AdminLogin from './components/AdminLogin';
 import DebugPage from './components/DebugPage';
+import TemplateTest from './components/TemplateTest';
 import ErrorLogger from './components/ErrorLogger';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -65,6 +66,7 @@ const AppContent: React.FC = () => {
               <Route path="/calendar" element={<Calendar />} />
               <Route path="/voice-recordings" element={<VoiceRecordings />} />
               <Route path="/whatsapp-reminders" element={<SimpleWhatsAppReminder />} />
+              <Route path="/template-test" element={<TemplateTest />} />
               <Route path="/debug" element={<DebugPage />} />
               <Route path="/invite/accept/:invitationId" element={<InviteAccept />} />
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -77,17 +79,38 @@ const AppContent: React.FC = () => {
   );
 };
 
-const App: React.FC = () => (
-  <ErrorBoundary>
-    <ErrorLogger>
-      <AuthProvider>
-        <Router>
-          <AppContent />
-        </Router>
-      </AuthProvider>
-    </ErrorLogger>
-  </ErrorBoundary>
-);
+const App: React.FC = () => {
+  // Initialize WhatsApp service when app starts
+  React.useEffect(() => {
+    // Initialize WhatsApp service with environment variables or default values
+    const apiKey = process.env.REACT_APP_DOUBLE_TICK_API_KEY || 'key_XAKKhG3Xdz';
+    
+    if (apiKey) {
+      const whatsAppService = require('./services/WhatsAppService').whatsAppService;
+      const initialized = whatsAppService.initialize(apiKey);
+      if (initialized) {
+        console.log('✅ WhatsApp Service initialized successfully');
+        console.log(`📱 API Key: ${apiKey.substring(0, 10)}...`);
+      } else {
+        console.warn('⚠️ WhatsApp Service: Failed to initialize');
+      }
+    } else {
+      console.warn('⚠️ WhatsApp Service: Missing API credentials');
+    }
+  }, []);
+
+  return (
+    <ErrorBoundary>
+      <ErrorLogger>
+        <AuthProvider>
+          <Router>
+            <AppContent />
+          </Router>
+        </AuthProvider>
+      </ErrorLogger>
+    </ErrorBoundary>
+  );
+};
 
 export default App;
 

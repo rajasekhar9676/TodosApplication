@@ -1,6 +1,7 @@
 import { db } from '../config';
 import { doc, getDoc, addDoc, updateDoc, collection, serverTimestamp, setDoc } from 'firebase/firestore';
 import { gmailService } from './gmailService';
+import { multiEmailService } from './multiEmailService';
 
 export interface Invitation {
   id: string;
@@ -11,6 +12,7 @@ export interface Invitation {
   status: 'pending' | 'accepted' | 'declined';
   invitedBy: string;
   invitedByName: string;
+  invitedByEmail: string; // 🔧 NEW: Store inviter's email
   createdAt: any;
   expiresAt: Date;
 }
@@ -22,13 +24,16 @@ export const invitationService = {
     email: string,
     role: string,
     invitedBy: string,
-    invitedByName: string
+    invitedByName: string,
+    invitedByEmail: string // 🔧 NEW: Add inviter's email parameter
   ): Promise<{ success: boolean; invitationId?: string; error?: string }> {
     try {
       console.log('📧 Starting invitation process...');
       console.log('📧 Team:', teamName);
       console.log('📧 Email:', email);
       console.log('📧 Role:', role);
+      console.log('📧 Invited by:', invitedByName);
+      console.log('📧 Inviter email:', invitedByEmail); // 🔧 NEW: Log inviter's email
 
       // 1. Store invitation in Firestore
       const invitationData = {
@@ -39,6 +44,7 @@ export const invitationService = {
         status: 'pending',
         invitedBy,
         invitedByName,
+        invitedByEmail, // 🔧 NEW: Store inviter's email
         createdAt: serverTimestamp(),
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
       };
@@ -66,18 +72,40 @@ export const invitationService = {
         console.log('✅ Team invitations array updated');
       }
 
-      // 3. Send email via Gmail API
-      console.log('📧 Sending email via Gmail API...');
-      const emailSuccess = await gmailService.sendInvitationEmail(
-        email.trim(),
-        teamName,
-        invitedByName,
-        role,
-        invitationRef.id
-      );
+      // 3. Send email via Multi-Email Service (NO DOMAIN RESTRICTIONS!)
+      console.log('🚀 Sending email via Multi-Email Service from ANY address:', invitedByEmail);
+      const emailResult = await multiEmailService.sendEmailFromAnyAddress({
+        from: invitedByEmail, // 🔥 NEW: Send from ANY email address!
+        to: email.trim(),
+        subject: `Invitation to join ${teamName}`,
+        htmlBody: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #2563eb;">🎯 Team Invitation</h2>
+            <p><strong>${invitedByName}</strong> has invited you to join <strong>${teamName}</strong> as a <strong>${role}</strong>.</p>
+            <p>This is a real collaboration invitation from your team member!</p>
+            <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <h3 style="margin-top: 0;">Team Details:</h3>
+              <p><strong>Team:</strong> ${teamName}</p>
+              <p><strong>Role:</strong> ${role}</p>
+              <p><strong>Invited by:</strong> ${invitedByName} (${invitedByEmail})</p>
+            </div>
+            <p>Click the button below to accept the invitation:</p>
+            <a href="${window.location.origin}/invite-accept/${invitationRef.id}" 
+               style="display: inline-block; background-color: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+              Accept Invitation
+            </a>
+            <p style="margin-top: 20px; font-size: 14px; color: #6b7280;">
+              This invitation expires in 7 days. If you have any questions, please contact ${invitedByName}.
+            </p>
+          </div>
+        `,
+        textBody: `${invitedByName} has invited you to join ${teamName} as a ${role}. Accept at: ${window.location.origin}/invite-accept/${invitationRef.id}`
+      }, invitedBy); // Pass user ID for preferences
+
+      const emailSuccess = emailResult.success;
 
       if (emailSuccess) {
-        console.log('✅ Email sent successfully');
+        console.log('✅ Email sent successfully from:', invitedByEmail);
         console.log('✅ Invitation process completed successfully');
         return { success: true, invitationId: invitationRef.id };
       } else {

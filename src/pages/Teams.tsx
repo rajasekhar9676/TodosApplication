@@ -90,7 +90,8 @@ const Teams: React.FC = () => {
             teamForm.inviteEmail.trim(),
             'member',
             user.uid,
-            user.displayName || user.email || 'Team Member'
+            user.displayName || user.email || 'Team Member',
+            user.email || '' // 🔧 NEW: Add inviter's email parameter
           );
 
           if (result.success) {

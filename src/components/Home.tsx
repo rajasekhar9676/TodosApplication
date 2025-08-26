@@ -1,19 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collection, onSnapshot, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../config';
+import { useAuth } from '../context/AuthContext';
+import { Task } from '../types/task';
 import TopBar, { TopBarProps } from './TopBar';
 import TaskItem from './TaskItem';
 import AddTaskForm from './AddTaskForm';
 import { useParams } from 'react-router-dom';
 
-interface Task {
-  id: string;
-  title: string;
-  dueDate: string;
-  status: 'TO-DO' | 'IN-PROGRESS' | 'COMPLETED';
-  category: string;
-}
 
 const Home: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -66,7 +61,10 @@ const Home: React.FC = () => {
   const inProgressTasks = filteredTasks.filter(task => task.status === 'IN-PROGRESS').slice(0, visibleTasks);
   const completedTasks = filteredTasks.filter(task => task.status === 'COMPLETED').slice(0, visibleTasks);
 
-  const handleSelectTask = (taskId: string) => {
+  const handleSelectTask = (task: Task) => {
+    const taskId = task.id;
+    if (!taskId) return;
+    
     if (selectedTasks.includes(taskId)) {
       setSelectedTasks(selectedTasks.filter(id => id !== taskId));
     } else {
@@ -90,6 +88,16 @@ const Home: React.FC = () => {
 
   const handleLoadMore = () => {
     setVisibleTasks(prev => prev + 5);
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    try {
+      await deleteDoc(doc(db, 'tasks', taskId));
+      // Remove from selected tasks if it was selected
+      setSelectedTasks(selectedTasks.filter(id => id !== taskId));
+    } catch (error) {
+      console.error('Error deleting task:', error);
+    }
   };
 
   return (
@@ -152,16 +160,17 @@ const Home: React.FC = () => {
                     No Tasks in To-Do
                   </div>
                 ) : (
-                  toDoTasks.map(task => (
+                  toDoTasks.map((task, index) => (
                     <TaskItem
-                      key={task.id}
+                      key={task.id || `task-${index}`}
                       task={task}
                       onEdit={(task) => {
                         setTaskToEdit(task);
                         setShowForm(true);
                       }}
+                      onDelete={handleDeleteTask}
                       onSelect={handleSelectTask}
-                      isSelected={selectedTasks.includes(task.id)}
+                      isSelected={selectedTasks.includes(task.id || '')}
                     />
                   ))
                 )}
@@ -191,16 +200,17 @@ const Home: React.FC = () => {
                     No Tasks In-Progress
                   </div>
                 ) : (
-                  inProgressTasks.map(task => (
+                  inProgressTasks.map((task, index) => (
                     <TaskItem
-                      key={task.id}
+                      key={task.id || `task-${index}`}
                       task={task}
                       onEdit={(task) => {
                         setTaskToEdit(task);
                         setShowForm(true);
                       }}
+                      onDelete={handleDeleteTask}
                       onSelect={handleSelectTask}
-                      isSelected={selectedTasks.includes(task.id)}
+                      isSelected={selectedTasks.includes(task.id || '')}
                     />
                   ))
                 )}
@@ -238,16 +248,17 @@ const Home: React.FC = () => {
                     No Tasks Completed
                   </div>
                 ) : (
-                  completedTasks.map(task => (
+                  completedTasks.map((task, index) => (
                     <TaskItem
-                      key={task.id}
+                      key={task.id || `task-${index}`}
                       task={task}
                       onEdit={(task) => {
                         setTaskToEdit(task);
                         setShowForm(true);
                       }}
+                      onDelete={handleDeleteTask}
                       onSelect={handleSelectTask}
-                      isSelected={selectedTasks.includes(task.id)}
+                      isSelected={selectedTasks.includes(task.id || '')}
                     />
                   ))
                 )}

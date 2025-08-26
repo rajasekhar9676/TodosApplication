@@ -3,25 +3,14 @@ import { Link } from 'react-router-dom';
 import { db } from '../config';
 import { doc, getDoc, collection, query, orderBy, limit, addDoc, serverTimestamp, onSnapshot, setDoc, updateDoc, getDocs, where } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
+import { Task } from '../types/task';
+import PhoneNumberCollector from '../components/PhoneNumberCollector';
 
 interface Team {
   id: string;
   name: string;
   description: string;
   members: Array<{ uid: string; role: string }>;
-  createdAt: any;
-}
-
-interface Task {
-  id: string;
-  title: string;
-  description: string;
-  status: 'todo' | 'in-progress' | 'completed';
-  priority: 'low' | 'medium' | 'high';
-  dueDate: any;
-  assignedTo: string;
-  teamId: string;
-  teamName: string;
   createdAt: any;
 }
 
@@ -234,11 +223,11 @@ const Dashboard: React.FC = () => {
   const [stats, setStats] = useState({
     totalTasks: 0,
     completedTasks: 0,
-    pendingTasks: 0,
-    teamsCount: 0
+    pendingTasks: 0
   });
   const [allTasks, setAllTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showAllTasksModal, setShowAllTasksModal] = useState(false);
 
   // Enhanced error handling for data fetching
   const fetchDashboardData = useCallback(async () => {
@@ -329,33 +318,57 @@ const Dashboard: React.FC = () => {
 
   // Enhanced task fetching with error handling
   const fetchUserTasks = useCallback(async () => {
-    if (!user?.uid || teams.length === 0) return;
+    if (!user?.uid) return;
     
     try {
-      console.log('📋 Dashboard: Fetching tasks for teams:', teams);
+      console.log('📋 Dashboard: Fetching tasks for user:', user.uid);
       
       const allTasks: any[] = [];
       
-      for (const teamId of teams) {
-        try {
-          const tasksQuery = query(
-            collection(db, 'tasks'), // Use main tasks collection
-            where('teamId', '==', teamId),
-            orderBy('createdAt', 'desc'),
-            limit(50)
-          );
-          
-          const tasksSnap = await getDocs(tasksQuery);
-          const teamTasks = tasksSnap.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          }));
-          
-          console.log(`📋 Dashboard: Team ${teamId} - All tasks: ${teamTasks.length}, User tasks: ${teamTasks.filter((task: any) => task.assignedTo === user.uid).length}`);
-          
-          allTasks.push(...teamTasks);
-        } catch (error) {
-          console.error('❌ Dashboard: Error fetching tasks for team:', teamId, error);
+      // 1. Fetch individual tasks created by the user
+      try {
+        const individualTasksQuery = query(
+          collection(db, 'tasks'),
+          where('createdBy', '==', user.uid),
+          orderBy('createdAt', 'desc'),
+          limit(50)
+        );
+        
+        const individualTasksSnap = await getDocs(individualTasksQuery);
+        const individualTasks = individualTasksSnap.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        
+        console.log(`📋 Dashboard: Individual tasks created by user: ${individualTasks.length}`);
+        allTasks.push(...individualTasks);
+      } catch (error) {
+        console.error('❌ Dashboard: Error fetching individual tasks:', error);
+      }
+      
+      // 2. Fetch team tasks if user has teams
+      if (teams.length > 0) {
+        for (const teamId of teams) {
+          try {
+            const tasksQuery = query(
+              collection(db, 'tasks'),
+              where('teamId', '==', teamId),
+              orderBy('createdAt', 'desc'),
+              limit(50)
+            );
+            
+            const tasksSnap = await getDocs(tasksQuery);
+            const teamTasks = tasksSnap.docs.map(doc => ({
+              id: doc.id,
+              ...doc.data()
+            }));
+            
+            console.log(`📋 Dashboard: Team ${teamId} - All tasks: ${teamTasks.length}, User tasks: ${teamTasks.filter((task: any) => task.assignedTo === user.uid).length}`);
+            
+            allTasks.push(...teamTasks);
+          } catch (error) {
+            console.error('❌ Dashboard: Error fetching tasks for team:', teamId, error);
+          }
         }
       }
       
@@ -364,66 +377,62 @@ const Dashboard: React.FC = () => {
         index === self.findIndex(t => t.id === task.id)
       );
       
-      const userTasks = uniqueTasks.filter(task => (task as any).assignedTo === user.uid);
+      // Count tasks that are either assigned to the user OR created by the user
+      const userTasks = uniqueTasks.filter(task => 
+        (task as any).assignedTo === user.uid || (task as any).createdBy === user.uid
+      );
       console.log('📋 Dashboard: Total user tasks after update:', userTasks.length, '(deduplicated)');
       
       setAllTasks(uniqueTasks);
       
       // Update stats with error handling
       try {
-                  const completedTasks = userTasks.filter(task => (task as any).status === 'completed').length;
-          const pendingTasks = userTasks.filter(task => (task as any).status !== 'completed').length;
+        const completedTasks = userTasks.filter(task => (task as any).status === 'COMPLETED').length;
+        const pendingTasks = userTasks.filter(task => (task as any).status !== 'COMPLETED').length;
         
         setStats({
           totalTasks: userTasks.length,
           completedTasks,
           pendingTasks,
-          teamsCount: teams.length
+
         });
         
-        console.log('📊 Dashboard: Stats updated:', { totalTasks: userTasks.length, completedTasks, pendingTasks, teamsCount: teams.length });
+        console.log('📊 Dashboard: Stats updated:', { totalTasks: userTasks.length, completedTasks, pendingTasks });
       } catch (error) {
         console.error('❌ Dashboard: Error updating stats:', error);
-        setStats({ totalTasks: 0, completedTasks: 0, pendingTasks: 0, teamsCount: 0 });
+        setStats({ totalTasks: 0, completedTasks: 0, pendingTasks: 0 });
       }
       
     } catch (error) {
       console.error('❌ Dashboard: Error in fetchUserTasks:', error);
       setAllTasks([]); // Clear tasks on error
-      setStats({ totalTasks: 0, completedTasks: 0, pendingTasks: 0, teamsCount: 0 });
+             setStats({ totalTasks: 0, completedTasks: 0, pendingTasks: 0 });
     }
-  }, [user?.uid, teams]);
+  }, [user?.uid, teams.length]); // Only depend on teams count, not content
 
   useEffect(() => {
     if (!user) return;
 
-    // Fetch user's teams and tasks
-    fetchDashboardData();
-    fetchUserTasks();
+    let isMounted = true;
 
-    // Set up real-time listener for user's teams array
-    if (user) {
-      const userRef = doc(db, 'users', user.uid);
-      const unsubscribeUser = onSnapshot(userRef, (doc) => {
-        if (doc.exists()) {
-          const userData = doc.data();
-          console.log('🔄 Dashboard: User data updated in real-time:', userData);
-          
-          // If teams array changed, refresh dashboard data (handle both field names)
-          const userTeams = userData?.teams || userData?.joinedTeams || [];
-          if (userTeams.length !== teams.length) {
-            console.log('🔄 Dashboard: Teams array changed, refreshing data...');
-            console.log('🔄 Dashboard: New teams count:', userTeams.length, 'vs current:', teams.length);
-            fetchDashboardData();
-          }
-        }
-      }, (error) => {
-        console.error('❌ Dashboard: Error listening to user updates:', error);
-      });
+    // Fetch user's teams and tasks with proper error handling
+    const initializeDashboard = async () => {
+      try {
+        if (!isMounted) return;
+        await fetchDashboardData();
+        if (!isMounted) return;
+        await fetchUserTasks();
+      } catch (error) {
+        console.error('❌ Dashboard: Error initializing dashboard:', error);
+      }
+    };
 
-      return () => unsubscribeUser();
-    }
-  }, [user, fetchDashboardData, fetchUserTasks, teams]);
+    initializeDashboard();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user, fetchDashboardData, fetchUserTasks]);
 
   // Add a refresh function for manual updates
   const refreshDashboard = async () => {
@@ -480,25 +489,33 @@ const Dashboard: React.FC = () => {
     console.log('🔄 Dashboard: User tasks updated:', allTasks.length, 'tasks');
     
     if (allTasks.length > 0) {
+      // Filter tasks that belong to the current user
+      const userTasks = allTasks.filter(task => 
+        task.assignedTo === user?.uid || task.createdBy === user?.uid
+      );
+      
       // Debug: Log all task details
-      console.log('📋 Dashboard: All user tasks:', allTasks.map(task => ({
+      console.log('📋 Dashboard: All user tasks:', userTasks.map(task => ({
         id: task.id,
         title: task.title,
-        teamName: task.teamName,
         status: task.status,
-        assignedTo: task.assignedTo
+        assignedTo: task.assignedTo,
+        createdBy: task.createdBy
       })));
       
       // Sort by creation date and take recent 10
-      const sortedTasks = allTasks.sort((a, b) => {
+      const sortedTasks = userTasks.sort((a, b) => {
         if (!a.createdAt || !b.createdAt) return 0;
-        return b.createdAt.toDate() - a.createdAt.toDate();
-      }).slice(0, 10);
-      setRecentTasks(sortedTasks);
+        // Handle both Firestore Timestamp and regular Date objects
+        const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt);
+        const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt);
+        return dateB.getTime() - dateA.getTime();
+      });
+      setRecentTasks(sortedTasks.slice(0, 10));
 
       // Calculate stats for user's tasks only
-      const totalTasks = allTasks.length;
-      const completedTasks = allTasks.filter(task => task.status === 'completed').length;
+      const totalTasks = userTasks.length;
+      const completedTasks = userTasks.filter(task => task.status === 'COMPLETED').length;
       const pendingTasks = totalTasks - completedTasks;
       
       console.log('📊 Dashboard: Updating user stats:', { totalTasks, completedTasks, pendingTasks });
@@ -518,7 +535,7 @@ const Dashboard: React.FC = () => {
         pendingTasks: 0
       }));
     }
-  }, [allTasks]);
+  }, [allTasks, user?.uid]);
 
   // Debug function to reset tasks state
   const resetTasksState = () => {
@@ -559,192 +576,191 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
+  const isProductionMode = process.env.NODE_ENV === 'production';
 
   return (
-    <div className="space-y-8">
-      {/* Welcome Header */}
-      <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-2xl p-8 text-white shadow-xl">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-4xl font-bold mb-2">Welcome back!</h1>
-            <p className="text-blue-100 text-lg">Here's what's happening with your personal tasks today.</p>
-          </div>
-          <div className="hidden md:block">
-            <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
-              <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-gray-200/50 dark:border-slate-700/50 p-6 hover:shadow-xl transition-all duration-300 hover:scale-105">
-          <div className="flex items-center">
-            <div className="p-3 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">My Tasks</p>
-              <p className="text-3xl font-bold text-gray-900 dark:text-white">{stats.totalTasks}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-gray-200/50 dark:border-slate-700/50 p-6 hover:shadow-xl transition-all duration-300 hover:scale-105">
-          <div className="flex items-center">
-            <div className="p-3 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl shadow-lg">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Completed</p>
-              <p className="text-3xl font-bold text-gray-900 dark:text-white">{stats.completedTasks}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-gray-200/50 dark:border-slate-700/50 p-6 hover:shadow-xl transition-all duration-300 hover:scale-105">
-          <div className="flex items-center">
-            <div className="p-3 bg-gradient-to-br from-yellow-500 to-orange-600 rounded-xl shadow-lg">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Pending</p>
-              <p className="text-3xl font-bold text-gray-900 dark:text-white">{stats.pendingTasks}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-gray-200/50 dark:border-slate-700/50 p-6 hover:shadow-xl transition-all duration-300 hover:scale-105">
-          <div className="flex items-center">
-            <div className="p-3 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl shadow-lg">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
-              </svg>
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Teams</p>
-              <p className="text-3xl font-bold text-gray-900 dark:text-white">{stats.teamsCount}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-  
-
-      {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Link
-          to="/tasks"
-          className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-gray-200/50 dark:border-slate-700/50 p-6 hover:shadow-xl transition-all duration-300 hover:scale-105 group"
-        >
-          <div className="flex items-center justify-between mb-4">
-            <div className="p-3 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-lg">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
-            </div>
-            <svg className="w-5 h-5 text-gray-400 group-hover:text-blue-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-            </svg>
-          </div>
-          <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Create Task</h3>
-          <p className="text-gray-600 dark:text-gray-300 text-sm">Add a new task to your team</p>
-        </Link>
-
-        <Link
-          to="/teams"
-          className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-gray-200/50 dark:border-slate-700/50 p-6 hover:shadow-xl transition-all duration-300 hover:scale-105 group"
-        >
-          <div className="flex items-center justify-between mb-4">
-            <div className="p-3 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl shadow-lg">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
-              </svg>
-            </div>
-            <svg className="w-5 h-5 text-gray-400 group-hover:text-green-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-            </svg>
-          </div>
-          <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Manage Teams</h3>
-          <p className="text-gray-600 dark:text-gray-300 text-sm">Create and manage your teams</p>
-        </Link>
-
-        <Link
-          to="/calendar"
-          className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-gray-200/50 dark:border-slate-700/50 p-6 hover:shadow-xl transition-all duration-300 hover:scale-105 group"
-        >
-          <div className="flex items-center justify-between mb-4">
-            <div className="p-3 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl shadow-lg">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-            </div>
-            <svg className="w-5 h-5 text-gray-400 group-hover:text-purple-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-            </svg>
-          </div>
-          <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">View Calendar</h3>
-          <p className="text-gray-600 dark:text-gray-300 text-sm">See your tasks in calendar view</p>
-        </Link>
-      </div>
-
-      {/* Teams Section */}
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-gray-200/50 dark:border-slate-700/50">
-        <div className="p-6 border-b border-gray-200/50 dark:border-slate-700/50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+      {/* Welcome Banner - Full Width with No Margins */}
+      <div className="w-full mb-6">
+        <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-2xl p-8 text-white shadow-xl mx-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">My Teams</h2>
-              <span className="px-3 py-1 bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded-full text-sm font-medium">
-                {teams.length} team{teams.length !== 1 ? 's' : ''}
-              </span>
+            <div>
+              <h1 className="text-4xl font-bold mb-2">Welcome back!</h1>
+              <p className="text-blue-100 text-lg">Here's what's happening with your personal tasks today.</p>
             </div>
-            <div className="flex items-center space-x-3">
-              <button
-                onClick={refreshDashboard}
-                disabled={loading}
-                className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
-                title="Refresh teams"
-              >
-                <svg className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            <div className="hidden md:block">
+              <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
+                <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                 </svg>
-              </button>
-              <Link to="/teams" className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 text-sm font-semibold transition-colors">
-                View all teams →
-              </Link>
+              </div>
             </div>
           </div>
         </div>
-        <div className="p-6">
-          {teams.length === 0 ? (
-            <div className="text-center py-12">
-              <div className="w-20 h-20 bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900 dark:to-indigo-900 rounded-full flex items-center justify-center mx-auto mb-6">
-                <svg className="w-10 h-10 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      </div>
+
+      {/* Stats Cards - Full Width Grid */}
+      <div className="px-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-gray-200/50 dark:border-slate-700/50 p-6 hover:shadow-xl transition-all duration-300 hover:scale-105">
+            <div className="flex items-center">
+              <div className="p-3 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg">
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">My Tasks</p>
+                <p className="text-3xl font-bold text-gray-900 dark:text-white">{stats.totalTasks}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-gray-200/50 dark:border-slate-700/50 p-6 hover:shadow-xl transition-all duration-300 hover:scale-105">
+            <div className="flex items-center">
+              <div className="p-3 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl shadow-lg">
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Completed</p>
+                <p className="text-3xl font-bold text-gray-900 dark:text-white">{stats.completedTasks}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-gray-200/50 dark:border-slate-700/50 p-6 hover:shadow-xl transition-all duration-300 hover:scale-105">
+            <div className="flex items-center">
+              <div className="p-3 bg-gradient-to-br from-yellow-500 to-orange-600 rounded-xl shadow-lg">
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Pending</p>
+                <p className="text-3xl font-bold text-gray-900 dark:text-white">{stats.pendingTasks}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-gray-200/50 dark:border-slate-700/50 p-6 hover:shadow-xl transition-all duration-300 hover:scale-105">
+            <div className="flex items-center">
+              <div className="p-3 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl shadow-lg">
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
                 </svg>
               </div>
-              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">No teams yet</h3>
-              <p className="text-gray-600 dark:text-gray-300 mb-6 max-w-md mx-auto">
-                Create your first team to start collaborating with others, or wait for team invitations to arrive. Teams help you organize tasks and work together efficiently.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                                  <button
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Teams</p>
+                <p className="text-3xl font-bold text-gray-900 dark:text-white">{teams.length}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Quick Actions - Full Width Grid */}
+      <div className="px-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Link
+            to="/tasks"
+            className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-gray-200/50 dark:border-slate-700/50 p-6 hover:shadow-xl transition-all duration-300 hover:scale-105 group"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-3 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-lg">
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+              </div>
+              <svg className="w-5 h-5 text-gray-400 group-hover:text-blue-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Create Task</h3>
+            <p className="text-gray-600 dark:text-gray-300 text-sm">Add a new task to your team</p>
+          </Link>
+
+          <Link
+            to="/teams"
+            className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-gray-200/50 dark:border-slate-700/50 p-6 hover:shadow-xl transition-all duration-300 hover:scale-105 group"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-3 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl shadow-lg">
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
+                </svg>
+              </div>
+              <svg className="w-5 h-5 text-gray-400 group-hover:text-green-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Manage Teams</h3>
+            <p className="text-gray-600 dark:text-gray-300 text-sm">Create and manage your teams</p>
+          </Link>
+
+          <Link
+            to="/calendar"
+            className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-gray-200/50 dark:border-slate-700/50 p-6 hover:shadow-xl transition-all duration-300 hover:scale-105 group"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-3 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl shadow-lg">
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <svg className="w-5 h-5 text-gray-400 group-hover:text-purple-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">View Calendar</h3>
+            <p className="text-gray-600 dark:text-gray-300 text-sm">See your tasks in calendar view</p>
+          </Link>
+        </div>
+      </div>
+
+      {/* Teams Section - Full Width */}
+      <div className="px-4 mb-6">
+        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-gray-200/50 dark:border-slate-700/50">
+          <div className="p-6 border-b border-gray-200/50 dark:border-slate-700/50">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">My Teams</h2>
+                <span className="px-3 py-1 bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded-full text-sm font-medium">
+                  {teams.length} team{teams.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={refreshDashboard}
+                  disabled={loading}
+                  className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
+                  title="Refresh teams"
+                >
+                  <svg className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </button>
+                <Link to="/teams" className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 text-sm font-semibold transition-colors">
+                  View all teams →
+                </Link>
+              </div>
+            </div>
+          </div>
+          <div className="p-6">
+            {teams.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="w-20 h-20 bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900 dark:to-indigo-900 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <svg className="w-10 h-10 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
+                  </svg>
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">No teams yet</h3>
+                <p className="text-gray-600 dark:text-gray-300 mb-6 max-w-md mx-auto">
+                  Create your first team to start collaborating with others, or wait for team invitations to arrive. Teams help you organize tasks and work together efficiently.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                  <button
                     onClick={refreshDashboard}
                     disabled={loading}
                     className="inline-flex items-center bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50"
@@ -752,265 +768,357 @@ const Dashboard: React.FC = () => {
                     <svg className={`w-5 h-5 mr-2 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                     </svg>
-                    {loading ? 'Refreshing...' : 'Refresh Teams'}
+                    {loading ? 'Refreshing...' : 'Refresh'}
                   </button>
-                  <button
-                    onClick={manualFixUserDocument}
-                    disabled={loading}
-                    className="inline-flex items-center bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50"
-                  >
-                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                    Fix User Document
-                  </button>
-                  <button
-                    onClick={() => migrateUserDocument(user?.uid || '', { teams: teams, joinedTeams: [] })}
-                    disabled={loading}
-                    className="inline-flex items-center bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50"
-                  >
-                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    Migrate Teams Data
-                  </button>
-                  <button
-                    onClick={() => debugInvitationStatus(user?.uid || '')}
-                    disabled={loading}
-                    className="inline-flex items-center bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-700 hover:to-orange-700 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50"
-                  >
-                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5M12 6a3 3 0 110 6 3 3 0 010-6z" />
-                    </svg>
-                    Debug Invitations
-                  </button>
-                  <button
-                    onClick={async () => {
-                      try {
-                        console.log('🔍 Dashboard: Checking all teams in database...');
-                        
-                        // Get all teams
-                        const teamsQuery = query(collection(db, 'teams'));
-                        const teamsSnap = await getDocs(teamsQuery);
-                        
-                        console.log('🔍 Dashboard: Total teams in database:', teamsSnap.size);
-                        
-                        if (!teamsSnap.empty) {
-                          teamsSnap.forEach(doc => {
-                            const team = doc.data();
-                            console.log('🔍 Dashboard: Team:', {
-                              id: doc.id,
-                              name: team.name,
-                              members: team.members?.length || 0,
-                              createdBy: team.createdBy
-                            });
-                          });
-                        } else {
-                          console.log('🔍 Dashboard: No teams found in database');
-                        }
-                      } catch (error) {
-                        console.error('❌ Dashboard: Error checking teams:', error);
-                      }
-                    }}
-                    disabled={loading}
-                    className="inline-flex items-center bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50"
+
+                  {!isProductionMode && (
+                    <button
+                      onClick={() => migrateUserDocument(user?.uid || '', { teams: teams, joinedTeams: [] })}
+                      disabled={loading}
+                      className="inline-flex items-center bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50"
+                    >
+                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      {isProductionMode ? 'Team Management' : 'Migrate Teams Data'}
+                    </button>
+                  )}
+
+                  <Link
+                    to="/teams"
+                    className="inline-flex items-center bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-200 shadow-lg hover:shadow-xl"
                   >
                     <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                     </svg>
-                    Check All Teams
-                  </button>
-                  <button
-                    onClick={() => clearTestTeam(user?.uid || '')}
-                    disabled={loading}
-                    className="inline-flex items-center bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50"
-                  >
-                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                    Clear Test Team
-                  </button>
-                  <button
-                    onClick={() => testAcceptInvitation(user?.uid || '')}
-                    disabled={loading}
-                    className="inline-flex items-center bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50"
-                  >
-                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                    </svg>
-                    Test Accept Invitation
-                  </button>
-                <Link
-                  to="/teams"
-                  className="inline-flex items-center bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-200 shadow-lg hover:shadow-xl"
-                >
-                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
-                  Create Your First Team
-                </Link>
+                    Create Your First Team
+                  </Link>
+                </div>
               </div>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {teams.slice(0, 6).map((team) => (
-                <Link
-                  key={team.id}
-                  to={`/teams/${team.id}`}
-                  className="group bg-gray-50 dark:bg-slate-700/50 rounded-xl p-6 hover:bg-white dark:hover:bg-slate-700 transition-all duration-300 hover:shadow-lg border border-gray-200/50 dark:border-slate-600/50"
-                >
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
-                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
-                      </svg>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {teams.slice(0, 6).map((team) => (
+                  <Link
+                    key={team.id}
+                    to={`/teams/${team.id}`}
+                    className="group bg-gray-50 dark:bg-slate-700/50 rounded-xl p-6 hover:bg-white dark:hover:bg-slate-700 transition-all duration-300 hover:shadow-lg border border-gray-200/50 dark:border-slate-600/50"
+                  >
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
+                        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
+                        </svg>
+                      </div>
+                      <div className="flex items-center space-x-1">
+                        <span className="text-sm text-gray-500 dark:text-gray-400">{team.members.length}</span>
+                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                      </div>
                     </div>
-                    <div className="flex items-center space-x-1">
-                      <span className="text-sm text-gray-500 dark:text-gray-400">{team.members.length}</span>
-                      <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
+                    
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                      {team.name}
+                    </h3>
+                    <p className="text-gray-600 dark:text-gray-300 text-sm mb-4 line-clamp-2">
+                      {team.description || 'No description provided'}
+                    </p>
+                    
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        Created {team.createdAt?.toDate ? new Date(team.createdAt.toDate()).toLocaleDateString() : 'Recently'}
+                      </span>
+                      <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-2 py-1 rounded-full">
+                        {team.members.find(m => m.uid === user?.uid)?.role || 'member'}
+                      </span>
                     </div>
-                  </div>
-                  
-                  <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                    {team.name}
-                  </h3>
-                  <p className="text-gray-600 dark:text-gray-300 text-sm mb-4 line-clamp-2">
-                    {team.description || 'No description provided'}
-                  </p>
-                  
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                      Created {team.createdAt?.toDate ? new Date(team.createdAt.toDate()).toLocaleDateString() : 'Recently'}
-                    </span>
-                    <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-2 py-1 rounded-full">
-                      {team.members.find(m => m.uid === user?.uid)?.role || 'member'}
-                    </span>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Recent Tasks */}
+      {/* Recent Tasks Section - Full Width */}
       {recentTasks.length > 0 && (
-        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-gray-200/50 dark:border-slate-700/50">
-          <div className="p-6 border-b border-gray-200/50 dark:border-slate-700/50">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Recent Tasks</h2>
-              <Link to="/tasks" className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 text-sm font-semibold transition-colors">
-                View all tasks →
-              </Link>
+        <div className="px-4 mb-6">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-gray-200/50 dark:border-slate-700/50">
+            <div className="p-6 border-b border-gray-200/50 dark:border-slate-700/50">
+              <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Recent Tasks</h2>
+                <button 
+                  onClick={() => setShowAllTasksModal(true)}
+                  className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 text-sm font-semibold transition-colors"
+                >
+                  View all tasks →
+                </button>
+              </div>
             </div>
-          </div>
-          <div className="p-6">
-            <div className="space-y-4">
-              {recentTasks.slice(0, 5).map((task) => (
-                <div key={task.id} className="flex items-center justify-between p-4 border border-gray-200/50 dark:border-slate-700/50 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2 mb-2">
-                      <h4 className="font-semibold text-gray-900 dark:text-white">{task.title}</h4>
-                      <span className="text-sm text-blue-600 dark:text-blue-400">•</span>
-                      <span className="text-sm text-blue-600 dark:text-blue-400">{task.teamName}</span>
-                    </div>
-                    <p className="text-gray-600 dark:text-gray-300 text-sm mb-2">{task.description}</p>
-                    <div className="flex items-center space-x-2">
-                      <span className={`px-2 py-1 text-xs rounded-full ${
-                        task.status === 'completed' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
-                        task.status === 'in-progress' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' :
-                        'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
-                      }`}>
-                        {task.status}
-                      </span>
-                      <span className={`px-2 py-1 text-xs rounded-full ${
-                        task.priority === 'high' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
-                        task.priority === 'medium' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' :
-                        'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                      }`}>
-                        {task.priority}
-                      </span>
-                      {task.dueDate && (
-                        <span className="text-xs text-gray-500 dark:text-gray-400">
-                          Due: {new Date(task.dueDate.toDate()).toLocaleDateString()}
+            <div className="p-6">
+              <div className="space-y-4">
+                {recentTasks.slice(0, 5).map((task) => (
+                  <div key={task.id} className="flex items-center justify-between p-4 border border-gray-200/50 dark:border-slate-700/50 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <h4 className="font-semibold text-gray-900 dark:text-white">{task.title}</h4>
+                        <span className="text-sm text-blue-600 dark:text-blue-400">•</span>
+                        <span className="text-sm text-blue-600 dark:text-blue-400">{task.taskType}</span>
+                      </div>
+                      <p className="text-gray-600 dark:text-gray-300 text-sm mb-2">{task.description}</p>
+                      <div className="flex items-center space-x-2">
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          task.status === 'COMPLETED' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
+                          task.status === 'IN-PROGRESS' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' :
+                          'bg-gray-100 text-gray-800 dark:bg-slate-700 dark:text-gray-200'
+                        }`}>
+                          {task.status}
                         </span>
-                      )}
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          task.priority === 'high' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
+                          task.priority === 'medium' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' :
+                          'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                        }`}>
+                          {task.priority}
+                        </span>
+                        {task.dueDate && (
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
+                            Due: {new Date(task.dueDate).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Voice Notes Section */}
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-gray-200/50 dark:border-slate-700/50">
-        <div className="p-6 border-b border-gray-200/50 dark:border-slate-700/50">
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Voice Notes</h2>
-            <div className="flex items-center space-x-2">
-              <span className="text-sm text-gray-500 dark:text-gray-400">
-                Click the microphone button to record
-              </span>
-            </div>
-          </div>
-        </div>
-        <div className="p-6">
-          {voiceNotes.length === 0 ? (
-            <div className="text-center py-12">
-              <div className="w-20 h-20 bg-gradient-to-br from-purple-100 to-pink-100 dark:from-purple-900 dark:to-pink-900 rounded-full flex items-center justify-center mx-auto mb-6">
-                <svg className="w-10 h-10 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                </svg>
+      {/* Voice Notes Section - Hidden in Production */}
+      {!isProductionMode && (
+        <div className="px-4 mb-6">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-gray-200/50 dark:border-slate-700/50">
+            <div className="p-6 border-b border-gray-200/50 dark:border-slate-700/50">
+              <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Voice Notes</h2>
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                    Click the microphone button to record
+                  </span>
+                </div>
               </div>
-              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">No voice notes yet</h3>
-              <p className="text-gray-600 dark:text-gray-300 mb-6 max-w-md mx-auto">
-                Use the microphone button in the bottom right corner to record your first voice note. Perfect for quick thoughts and ideas!
-              </p>
             </div>
-          ) : (
-            <div className="space-y-4">
-              {voiceNotes.map((note) => (
-                <div key={note.id} className="bg-gray-50 dark:bg-slate-700/50 rounded-xl p-4 border border-gray-200/50 dark:border-slate-600/50">
-                  <div className="flex items-start space-x-3">
-                    <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                      </svg>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-wrap">
-                        {note.text}
-                      </p>
-                      <div className="flex items-center justify-between mt-3">
-                        <span className="text-xs text-gray-500 dark:text-gray-400">
-                          {note.createdAt?.toDate ? 
-                            new Date(note.createdAt.toDate()).toLocaleString() : 
-                            new Date(note.createdAt).toLocaleString()
-                          }
-                        </span>
-                        <div className="flex items-center space-x-2">
-                          <button
-                            onClick={() => navigator.clipboard.writeText(note.text)}
-                            className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
-                            title="Copy to clipboard"
-                          >
-                            Copy
-                          </button>
+            <div className="p-6">
+              {voiceNotes.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="w-20 h-20 bg-gradient-to-br from-purple-100 to-pink-100 dark:from-purple-900 dark:to-pink-900 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <svg className="w-10 h-10 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">No voice notes yet</h3>
+                  <p className="text-gray-600 dark:text-gray-300 mb-6 max-w-md mx-auto">
+                    Use the microphone button in the bottom right corner to record your first voice note. Perfect for quick thoughts and ideas!
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {voiceNotes.map((note) => (
+                    <div key={note.id} className="bg-gray-50 dark:bg-slate-700/50 rounded-xl p-4 border border-gray-200/50 dark:border-slate-600/50">
+                      <div className="flex items-start space-x-3">
+                        <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
+                          <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                          </svg>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-wrap">
+                            {note.text}
+                          </p>
+                          <div className="flex items-center justify-between mt-3">
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                              {note.createdAt?.toDate ? 
+                                new Date(note.createdAt.toDate()).toLocaleString() : 
+                                new Date(note.createdAt).toLocaleString()
+                              }
+                            </span>
+                            <div className="flex items-center space-x-2">
+                              <button
+                                onClick={() => navigator.clipboard.writeText(note.text)}
+                                className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
+                                title="Copy to clipboard"
+                              >
+                                Copy
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View All Tasks Modal */}
+      {showAllTasksModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-11/12 sm:w-3/4 lg:w-2/3 xl:w-1/2 max-h-[90vh] overflow-y-auto relative">
+            <button 
+              onClick={() => setShowAllTasksModal(false)} 
+              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 z-10"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"></path>
+              </svg>
+            </button>
+
+            <div className="p-6">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">All Your Tasks</h2>
+              
+              {/* Task Count Summary */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-4">
+                  <div className="flex items-center">
+                    <div className="flex-shrink-0">
+                      <svg className="h-5 w-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                      </svg>
+                    </div>
+                    <div className="ml-3">
+                      <p className="text-sm font-medium text-blue-800 dark:text-blue-200">Total</p>
+                      <p className="text-lg font-semibold text-blue-900 dark:text-blue-100">{stats.totalTasks}</p>
+                    </div>
                   </div>
                 </div>
-              ))}
+
+                <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg p-4">
+                  <div className="flex items-center">
+                    <div className="flex-shrink-0">
+                      <svg className="h-5 w-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <div className="ml-3">
+                      <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">Pending</p>
+                      <p className="text-lg font-semibold text-yellow-900 dark:text-yellow-100">{stats.pendingTasks}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-lg p-4">
+                  <div className="flex items-center">
+                    <div className="flex-shrink-0">
+                      <svg className="h-5 w-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                    <div className="ml-3">
+                      <p className="text-sm font-medium text-green-800 dark:text-green-200">Completed</p>
+                      <p className="text-lg font-semibold text-green-900 dark:text-green-100">{stats.completedTasks}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* All Tasks List */}
+              <div className="space-y-3">
+                {allTasks.filter(task => 
+                  task.assignedTo === user?.uid || task.createdBy === user?.uid
+                ).map((task) => (
+                  <div key={task.id} className="flex items-center justify-between p-4 border border-gray-200 dark:border-slate-600 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <h4 className="font-semibold text-gray-900 dark:text-white">{task.title}</h4>
+                        <span className="text-sm text-blue-600 dark:text-blue-400">•</span>
+                        <span className="text-sm text-blue-600 dark:text-blue-400">{task.taskType}</span>
+                      </div>
+                      {task.description && (
+                        <p className="text-gray-600 dark:text-gray-300 text-sm mb-2">{task.description}</p>
+                      )}
+                      <div className="flex items-center space-x-2">
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          task.status === 'COMPLETED' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
+                          task.status === 'IN-PROGRESS' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' :
+                          'bg-gray-100 text-gray-800 dark:bg-slate-700 dark:text-gray-200'
+                        }`}>
+                          {task.status}
+                        </span>
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          task.priority === 'high' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
+                          task.priority === 'medium' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' :
+                          'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                        }`}>
+                          {task.priority}
+                        </span>
+                        {task.dueDate && (
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
+                            Due: {new Date(task.dueDate).toLocaleDateString()}
+                          </span>
+                        )}
+                        {task.attachments && task.attachments.length > 0 && (
+                          <span className="text-xs text-blue-600 dark:text-blue-400">
+                            📎 {task.attachments.length} file(s)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-2 ml-4">
+                      <button
+                        onClick={() => {
+                          setShowAllTasksModal(false);
+                          // Navigate to tasks page with this task selected
+                          window.location.href = `/tasks?view=${task.id}`;
+                        }}
+                        className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 text-sm font-medium"
+                      >
+                        View Details
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* No Tasks Message */}
+              {allTasks.filter(task => 
+                task.assignedTo === user?.uid || task.createdBy === user?.uid
+              ).length === 0 && (
+                <div className="text-center py-12">
+                  <div className="w-20 h-20 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-800 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <svg className="w-10 h-10 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-3">No tasks yet</h3>
+                  <p className="text-gray-600 dark:text-gray-300 mb-6">
+                    You haven't created or been assigned any tasks yet.
+                  </p>
+                  <button
+                    onClick={() => {
+                      setShowAllTasksModal(false);
+                      window.location.href = '/tasks';
+                    }}
+                    className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+                  >
+                    Create Your First Task
+                  </button>
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Phone Number Collector for Gmail Users */}
+      <PhoneNumberCollector 
+        onComplete={() => console.log('Phone number collection completed')}
+        showSkip={true}
+      />
 
     </div>
   );

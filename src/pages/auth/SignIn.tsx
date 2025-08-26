@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { auth, provider } from '../../config';
 import { signInWithPopup } from 'firebase/auth';
+import { userPhoneService } from '../../services/userPhoneService';
+import { db } from '../../config';
+import { doc, setDoc } from 'firebase/firestore';
 
 const SignIn: React.FC = () => {
   const [loading, setLoading] = useState(false);
@@ -22,7 +25,26 @@ const SignIn: React.FC = () => {
     setError('');
     
     try {
-      await signInWithPopup(auth, provider);
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+      
+      // 🚀 AUTO-SAVE USER DATA TO FIRESTORE
+      await setDoc(doc(db, 'users', user.uid), {
+        displayName: user.displayName,
+        email: user.email,
+        photoURL: user.photoURL,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }, { merge: true });
+      
+      // 🚀 AUTO-SAVE PHONE NUMBER FROM GOOGLE LOGIN (if available)
+      if (user.phoneNumber) {
+        console.log('📱 SignIn: Found phone number in Google profile:', user.phoneNumber);
+        await userPhoneService.getPhoneFromGoogleLogin(user);
+        console.log('✅ SignIn: Phone number automatically saved from Google login!');
+      } else {
+        console.log('ℹ️ SignIn: No phone number found in Google profile');
+      }
       
       // Check if there's a pending invitation to redirect to
       const pendingInvitationId = sessionStorage.getItem('pendingInvitationId');

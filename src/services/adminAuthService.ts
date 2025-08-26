@@ -2,8 +2,8 @@ import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfi
 import { auth } from '../config';
 
 // Hardcoded admin credentials
-const ADMIN_EMAIL = 'mrajasekhar9676@gmail.com';
-const ADMIN_PASSWORD = 'admin123';
+const ADMIN_EMAIL = 'accounts@educationtoday.co';
+const ADMIN_PASSWORD = 'admin@123';
 
 // Temporary bypass for rate limiting issues
 const ENABLE_FIREBASE_ADMIN_AUTH = true;

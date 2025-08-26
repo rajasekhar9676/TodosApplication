@@ -128,3 +128,8 @@ If you continue to experience errors:
 2. Look at the error display (red button)
 3. Check browser console (F12)
 4. Provide specific error messages and steps to reproduce
+
+
+
+
+

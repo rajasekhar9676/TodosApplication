@@ -34,3 +34,8 @@ Write-Host "   🎉 Speech features should work perfectly!" -ForegroundColor Gre
 
 
 
+
+
+
+
+

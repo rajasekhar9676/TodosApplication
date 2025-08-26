@@ -159,3 +159,8 @@ When reporting issues, include:
 **Priority**: 🔴 **High**
 **Impact**: Users cannot join teams via invitations
 
+
+
+
+
+

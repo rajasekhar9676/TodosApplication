@@ -1,11 +1,14 @@
 // Gmail API Service using OAuth 2.0
-// This service handles sending emails via Gmail API
+// This service handles sending emails via Gmail API with dynamic user accounts
+// Supports both regular Gmail and Google Workspace accounts
 
 interface GmailCredentials {
   clientId: string;
   clientSecret: string;
   refreshToken: string;
   senderEmail: string;
+  isGoogleWorkspace?: boolean; // 🔧 NEW: Flag for Google Workspace accounts
+  domain?: string; // 🔧 NEW: Domain for Google Workspace accounts
 }
 
 interface EmailData {
@@ -13,10 +16,12 @@ interface EmailData {
   subject: string;
   htmlBody: string;
   textBody?: string;
+  fromEmail?: string; // Dynamic sender email
 }
 
 class GmailService {
   private credentials: GmailCredentials;
+  private userCredentials: Map<string, GmailCredentials> = new Map(); // Store per-user credentials
 
   constructor() {
     this.credentials = {
@@ -24,7 +29,17 @@ class GmailService {
       clientSecret: process.env.REACT_APP_GMAIL_CLIENT_SECRET || '',
       refreshToken: process.env.REACT_APP_GMAIL_REFRESH_TOKEN || '',
       senderEmail: process.env.REACT_APP_SENDER_EMAIL || 'rajasekharm2268@gmail.com',
+      isGoogleWorkspace: false,
+      domain: 'gmail.com'
     };
+    
+    // 🔧 NEW: Detect if this is a Google Workspace account
+    if (this.credentials.senderEmail.includes('@') && !this.credentials.senderEmail.endsWith('@gmail.com')) {
+      this.credentials.isGoogleWorkspace = true;
+      this.credentials.domain = this.credentials.senderEmail.split('@')[1];
+      console.log('🏢 Detected Google Workspace account:', this.credentials.senderEmail);
+      console.log('🌐 Domain:', this.credentials.domain);
+    }
     
     // Debug logging to check environment variables
     console.log('🔧 Gmail Service Debug:');
@@ -32,6 +47,8 @@ class GmailService {
     console.log('Client Secret:', this.credentials.clientSecret ? 'Found' : 'Missing');
     console.log('Refresh Token:', this.credentials.refreshToken ? `Found (${this.credentials.refreshToken.length} chars)` : 'Missing');
     console.log('Sender Email:', this.credentials.senderEmail);
+    console.log('Is Google Workspace:', this.credentials.isGoogleWorkspace);
+    console.log('Domain:', this.credentials.domain);
     
     // Check if credentials are properly configured
     if (!this.credentials.clientId || !this.credentials.clientSecret || !this.credentials.refreshToken) {
@@ -39,6 +56,23 @@ class GmailService {
       console.warn('📧 Email sending will fall back to DEMO MODE');
       console.warn('📖 See GMAIL_SETUP_GUIDE.md for configuration instructions');
     }
+  }
+
+  // 🔧 NEW: Add user's Gmail credentials
+  addUserCredentials(userId: string, userCreds: GmailCredentials) {
+    console.log('🔐 Adding Gmail credentials for user:', userId);
+    console.log('📧 User email:', userCreds.senderEmail);
+    this.userCredentials.set(userId, userCreds);
+  }
+
+  // 🔧 NEW: Get user's Gmail credentials
+  getUserCredentials(userId: string): GmailCredentials | null {
+    return this.userCredentials.get(userId) || null;
+  }
+
+  // 🔧 NEW: Check if user has connected Gmail
+  hasUserGmail(userId: string): boolean {
+    return this.userCredentials.has(userId);
   }
 
   // Get the base URL for invitation links
@@ -54,9 +88,9 @@ class GmailService {
     }
   }
 
-  private async getAccessToken(): Promise<string> {
+  private async getAccessToken(credentials: GmailCredentials): Promise<string> {
     try {
-      console.log('🔐 Getting Gmail access token...');
+      console.log('🔐 Getting Gmail access token for:', credentials.senderEmail);
       
       const response = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
@@ -64,9 +98,9 @@ class GmailService {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
         body: new URLSearchParams({
-          client_id: this.credentials.clientId,
-          client_secret: this.credentials.clientSecret,
-          refresh_token: this.credentials.refreshToken,
+          client_id: credentials.clientId,
+          client_secret: credentials.clientSecret,
+          refresh_token: credentials.refreshToken,
           grant_type: 'refresh_token',
         }),
       });
@@ -76,20 +110,194 @@ class GmailService {
       }
 
       const data = await response.json();
-      console.log('✅ Access token obtained successfully');
+      console.log('✅ Access token obtained successfully for:', credentials.senderEmail);
       return data.access_token;
     } catch (error) {
-      console.error('❌ Error getting access token:', error);
+      console.error('❌ Error getting access token for:', credentials.senderEmail, error);
       throw error;
     }
   }
 
-  private createEmailMessage(emailData: EmailData): string {
+  // 🔧 NEW: Get Gmail sendAs addresses for the authenticated user
+  private async getSendAsAddresses(accessToken: string): Promise<string[]> {
+    try {
+      console.log('🔍 Getting Gmail sendAs addresses...');
+      
+      const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/settings/sendAs', {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        console.warn('⚠️ Could not fetch sendAs addresses, will use default');
+        return [];
+      }
+
+      const data = await response.json();
+      const sendAsAddresses = data.sendAs?.map((sendAs: any) => sendAs.sendAsEmail) || [];
+      
+      console.log('✅ SendAs addresses found:', sendAsAddresses);
+      return sendAsAddresses;
+    } catch (error) {
+      console.warn('⚠️ Error fetching sendAs addresses:', error);
+      return [];
+    }
+  }
+
+  // 🔧 NEW: Check if user can send from their email address
+  private async canSendFromEmail(accessToken: string, targetEmail: string): Promise<boolean> {
+    try {
+      const sendAsAddresses = await this.getSendAsAddresses(accessToken);
+      
+      // Check if the target email is in the sendAs list
+      const canSend = sendAsAddresses.includes(targetEmail);
+      console.log(`🔍 Can send from ${targetEmail}:`, canSend);
+      console.log(`📧 Available sendAs addresses:`, sendAsAddresses);
+      
+      return canSend;
+    } catch (error) {
+      console.warn('⚠️ Error checking sendAs capability:', error);
+      return false;
+    }
+  }
+
+  // 🔧 NEW: Get setup instructions for Gmail SendAs
+  getSendAsSetupInstructions(userEmail: string): string {
+    return `
+🔧 Gmail SendAs Setup Instructions for ${userEmail}
+
+To send emails that appear to come from your own email address:
+
+1. 📧 Go to Gmail Settings (gear icon → Settings)
+2. 🔐 Go to "Accounts and Import" tab
+3. 📤 Under "Send mail as", click "Add another email address"
+4. ✉️ Enter your email: ${userEmail}
+5. ✅ Check "Treat as an alias"
+6. 📨 Gmail will send a verification email
+7. 🔗 Click the verification link in the email
+8. ✅ Your email is now added to SendAs list
+
+After setup, invitations will be sent from your email address!
+
+💡 Note: This requires access to the email account you want to send from.
+    `;
+  }
+
+  // 🔧 NEW: Check if user needs SendAs setup
+  async needsSendAsSetup(userId: string, targetEmail: string): Promise<boolean> {
+    try {
+      const userCreds = this.getUserCredentials(userId);
+      if (!userCreds) return false;
+
+      const accessToken = await this.getAccessToken(userCreds);
+      return !(await this.canSendFromEmail(accessToken, targetEmail));
+    } catch (error) {
+      console.warn('⚠️ Error checking SendAs setup:', error);
+      return true; // Assume setup is needed if we can't check
+    }
+  }
+
+  // 🔧 NEW: Get Google Workspace dynamic email options
+  getGoogleWorkspaceOptions(userEmail: string): string[] {
+    if (!this.credentials.isGoogleWorkspace) return [];
+    
+    const domain = this.credentials.domain;
+    const username = userEmail.split('@')[0];
+    
+    // Generate possible email addresses for the user
+    return [
+      `${username}@${domain}`,
+      `${username}.team@${domain}`,
+      `${username}.collab@${domain}`,
+      `team.${username}@${domain}`,
+      `collab.${username}@${domain}`
+    ];
+  }
+
+  // 🔧 NEW: Check if email address is valid for Google Workspace domain
+  isValidDomainEmail(email: string): boolean {
+    if (!this.credentials.isGoogleWorkspace) return true; // Regular Gmail allows any email
+    
+    const domain = this.credentials.domain;
+    return email.endsWith(`@${domain}`);
+  }
+
+  // 🔧 NEW: Get dynamic email sending recommendations
+  getDynamicEmailRecommendations(userEmail: string): {
+    type: 'gmail' | 'workspace' | 'hybrid';
+    recommendations: string[];
+    limitations: string[];
+    solutions: string[];
+  } {
+    if (this.credentials.isGoogleWorkspace) {
+      return {
+        type: 'workspace',
+        recommendations: [
+          'Use Google Workspace SendAs feature',
+          'Create email aliases in Google Admin Console',
+          'Use domain email addresses',
+          'Implement email routing rules'
+        ],
+        limitations: [
+          'Cannot send from arbitrary email addresses',
+          'Domain restrictions apply',
+          'Admin approval may be required',
+          'Limited to domain email addresses'
+        ],
+        solutions: [
+          'Set up SendAs addresses in Gmail',
+          'Create email aliases in Admin Console',
+          'Use domain email addresses',
+          'Implement email forwarding rules'
+        ]
+      };
+    } else {
+      return {
+        type: 'gmail',
+        recommendations: [
+          'Use Gmail SendAs feature',
+          'Verify email addresses',
+          'Set up email aliases',
+          'Use Gmail filters and labels'
+        ],
+        limitations: [
+          'Cannot spoof arbitrary addresses',
+          'SendAs setup required',
+          'Verification needed',
+          'Limited to verified addresses'
+        ],
+        solutions: [
+          'Set up Gmail SendAs',
+          'Verify email addresses',
+          'Use Gmail aliases',
+          'Implement forwarding'
+        ]
+      };
+    }
+  }
+
+  // 🔧 NEW: Create dynamic email address for user
+  createDynamicEmailAddress(userEmail: string, teamName: string): string {
+    if (!this.credentials.isGoogleWorkspace) {
+      // For regular Gmail, use the user's email
+      return userEmail;
+    }
+    
+    // For Google Workspace, create a domain-specific email
+    const domain = this.credentials.domain;
+    const username = userEmail.split('@')[0];
+    const sanitizedTeamName = teamName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    
+    return `${username}.${sanitizedTeamName}@${domain}`;
+  }
+
+  private createEmailMessage(emailData: EmailData, fromEmail: string): string {
     const boundary = 'boundary_' + Math.random().toString(36).substring(2);
     
-    // Create RFC 2822 compliant email message
+    // Create RFC 2822 compliant email message with dynamic sender
     const message = [
-      `From: ${this.credentials.senderEmail}`,
+      `From: ${fromEmail}`, // Use dynamic sender email
       `To: ${emailData.to}`,
       `Subject: ${emailData.subject}`,
       'MIME-Version: 1.0',
@@ -201,18 +409,43 @@ class GmailService {
     `;
   }
 
-  async sendEmail(emailData: EmailData): Promise<boolean> {
+  async sendEmail(emailData: EmailData, userId?: string): Promise<boolean> {
     try {
       console.log('📧 Starting Gmail API email send process...');
       console.log('📧 To:', emailData.to);
       console.log('📧 Subject:', emailData.subject);
+      console.log('📧 From (requested):', emailData.fromEmail);
+      console.log('📧 User ID:', userId);
+
+      // 🔧 NEW: Try to use user's Gmail credentials first
+      let credentialsToUse = this.credentials; // Default fallback
+      let senderEmail = this.credentials.senderEmail;
+
+      if (userId && this.hasUserGmail(userId)) {
+        const userCreds = this.getUserCredentials(userId);
+        if (userCreds) {
+          credentialsToUse = userCreds;
+          senderEmail = userCreds.senderEmail;
+          console.log('✅ Using user-specific Gmail credentials for:', senderEmail);
+        }
+      } else if (emailData.fromEmail && userId && this.hasUserGmail(userId)) {
+        // Use the requested from email if user has connected Gmail
+        const userCreds = this.getUserCredentials(userId);
+        if (userCreds) {
+          credentialsToUse = userCreds;
+          senderEmail = emailData.fromEmail;
+          console.log('✅ Using user-requested email:', senderEmail);
+        }
+      }
+
+      console.log('📧 Final sender email:', senderEmail);
 
       // Check if credentials are configured
-      if (!this.credentials.clientId || !this.credentials.clientSecret || !this.credentials.refreshToken) {
+      if (!credentialsToUse.clientId || !credentialsToUse.clientSecret || !credentialsToUse.refreshToken) {
         console.warn('⚠️ Gmail API credentials not configured. Running in demo mode.');
         console.log('📧 EMAIL CONTENT (DEMO MODE):');
         console.log('=================================');
-        console.log('FROM:', this.credentials.senderEmail);
+        console.log('FROM:', senderEmail);
         console.log('TO:', emailData.to);
         console.log('SUBJECT:', emailData.subject);
         console.log('TEXT BODY:', emailData.textBody || 'No text body');
@@ -225,11 +458,30 @@ class GmailService {
         return true;
       }
 
-      // Get access token
-      const accessToken = await this.getAccessToken();
+      // Get access token for the specific credentials
+      const accessToken = await this.getAccessToken(credentialsToUse);
 
-      // Create email message
-      const rawMessage = this.createEmailMessage(emailData);
+      // 🔧 NEW: Check if we can send from the requested email address
+      const canSendFromRequestedEmail = await this.canSendFromEmail(accessToken, senderEmail);
+      
+      if (!canSendFromRequestedEmail) {
+        console.warn(`⚠️ Cannot send from ${senderEmail} - Gmail doesn't have permission`);
+        
+        if (this.credentials.isGoogleWorkspace) {
+          // For Google Workspace, create a domain-specific email
+          const domain = this.credentials.domain;
+          const username = credentialsToUse.senderEmail.split('@')[0];
+          senderEmail = `${username}.team@${domain}`;
+          console.log(`🏢 Google Workspace: Using domain email: ${senderEmail}`);
+        } else {
+          // For regular Gmail, use the authenticated account's email
+          senderEmail = credentialsToUse.senderEmail;
+          console.log(`📧 Regular Gmail: Using authenticated account: ${senderEmail}`);
+        }
+      }
+
+      // Create email message with dynamic sender
+      const rawMessage = this.createEmailMessage(emailData, senderEmail);
 
       // Send email via Gmail API
       const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
@@ -251,7 +503,7 @@ class GmailService {
       }
 
       const result = await response.json();
-      console.log('✅ Email sent successfully via Gmail API');
+      console.log('✅ Email sent successfully via Gmail API from:', senderEmail);
       console.log('📧 Message ID:', result.id);
       
       return true;
@@ -262,7 +514,7 @@ class GmailService {
       // Fallback to demo mode if API fails
       console.log('📧 EMAIL CONTENT (FALLBACK DEMO MODE):');
       console.log('=================================');
-      console.log('FROM:', this.credentials.senderEmail);
+      console.log('FROM:', emailData.fromEmail || this.credentials.senderEmail);
       console.log('TO:', emailData.to);
       console.log('SUBJECT:', emailData.subject);
       console.log('=================================');
@@ -276,7 +528,9 @@ class GmailService {
     teamName: string,
     inviterName: string,
     role: string,
-    invitationId: string
+    invitationId: string,
+    userId?: string, // 🔧 NEW: Add user ID parameter
+    fromEmail?: string // 🔧 NEW: Add from email parameter
   ): Promise<boolean> {
     try {
       console.log('📧 Sending invitation email...');
@@ -285,6 +539,15 @@ class GmailService {
       console.log('📧 Inviter:', inviterName);
       console.log('📧 Role:', role);
       console.log('📧 Invitation ID:', invitationId);
+      console.log('📧 User ID:', userId);
+      console.log('📧 From Email:', fromEmail);
+
+      // 🔧 NEW: Check if user has connected Gmail
+      if (userId && this.hasUserGmail(userId)) {
+        console.log('✅ User has connected Gmail - will send from their account');
+      } else {
+        console.log('ℹ️ User has not connected Gmail - will use fallback system');
+      }
 
       // Check if Gmail credentials are configured
       if (!this.credentials.clientId || !this.credentials.clientSecret || !this.credentials.refreshToken) {
@@ -293,6 +556,7 @@ class GmailService {
         console.log('📧 DEMO: Team:', teamName);
         console.log('📧 DEMO: Inviter:', inviterName);
         console.log('📧 DEMO: Role:', role);
+        console.log('📧 DEMO: From Email:', fromEmail || 'Default System Email');
         console.log('📧 DEMO: Invitation Link:', `${this.getBaseUrl()}/invite/accept/${invitationId}`);
         
         // In demo mode, we simulate success but don't actually send email
@@ -300,45 +564,17 @@ class GmailService {
         return true;
       }
 
-      // Real Gmail API implementation
-      const accessToken = await this.getAccessToken();
-      
+      // 🔧 NEW: Use dynamic email sending
       const emailData = {
         to,
         subject: `Invitation to join ${teamName}`,
         htmlBody: this.createInvitationEmailHTML(teamName, inviterName, role, invitationId),
-        textBody: this.createInvitationEmailText(teamName, inviterName, role, invitationId)
+        textBody: this.createInvitationEmailText(teamName, inviterName, role, invitationId),
+        fromEmail: fromEmail // Pass the requested from email
       };
 
-      const message = this.createEmailMessage(emailData);
-      console.log('📧 Raw email message created, length:', message.length);
-
-      const response = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/send`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          raw: message
-        })
-      });
-
-      if (!response.ok) {
-        let errorData;
-        try {
-          errorData = await response.json();
-        } catch (e) {
-          errorData = await response.text();
-        }
-        console.error('❌ Gmail API error:', errorData);
-        console.error('❌ Response status:', response.status);
-        console.error('❌ Response headers:', response.headers);
-        throw new Error(`Gmail API error: ${response.status} ${response.statusText}`);
-      }
-
-      console.log('✅ Email sent successfully via Gmail API');
-      return true;
+      // Send email using the enhanced sendEmail method
+      return await this.sendEmail(emailData, userId);
 
     } catch (error) {
       console.error('❌ Error sending invitation email:', error);
@@ -349,6 +585,7 @@ class GmailService {
       console.log('📧 DEMO: Team:', teamName);
       console.log('📧 DEMO: Inviter:', inviterName);
       console.log('📧 DEMO: Role:', role);
+      console.log('📧 DEMO: From Email:', fromEmail || 'Default System Email');
       console.log('📧 DEMO: Invitation Link:', `${this.getBaseUrl()}/invite/accept/${invitationId}`);
       
       return true; // Return true so invitation flow continues

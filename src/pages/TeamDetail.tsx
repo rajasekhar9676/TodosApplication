@@ -5,6 +5,7 @@ import { doc, getDoc, updateDoc, collection, addDoc, serverTimestamp, getDocs } 
 import { useAuth } from '../context/AuthContext';
 import { invitationService } from '../services/invitationService';
 import { gmailService } from '../services/gmailService';
+import { multiEmailService } from '../services/multiEmailService';
 import TeamTasks from '../components/TeamTasks';
 import TeamMembers from '../components/TeamMembers';
 import TeamOverview from '../components/TeamOverview';
@@ -183,30 +184,57 @@ const TeamDetail: React.FC = () => {
     invitationId: string
   ): Promise<boolean> => {
     try {
-      console.log('📧 Attempting to send invitation email via Gmail API...');
+      console.log('🚀 Attempting to send invitation email via Multi-Email Service...');
       console.log('📧 To:', email);
       console.log('📧 Team:', teamName);
       console.log('📧 Inviter:', inviterName);
       console.log('📧 Role:', role);
+      console.log('📧 From (user email):', user?.email || 'team@collaboration.com');
+      console.log('📧 User ID:', user?.uid);
 
-      // Use the Gmail service to send the actual email
-      const success = await gmailService.sendInvitationEmail(
-        email,
-        teamName,
-        inviterName,
-        role,
-        invitationId
-      );
+      // Use the Multi-Email Service to send from ANY address (NO DOMAIN RESTRICTIONS!)
+      const emailResult = await multiEmailService.sendEmailFromAnyAddress({
+        from: user?.email || 'team@collaboration.com', // Use user's email or fallback
+        to: email,
+        subject: `Invitation to join ${teamName}`,
+        htmlBody: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #2563eb;">🎯 Team Invitation</h2>
+            <p><strong>${inviterName}</strong> has invited you to join <strong>${teamName}</strong> as a <strong>${role}</strong>.</p>
+            <p>This is a real collaboration invitation from your team member!</p>
+            <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <h3 style="margin-top: 0;">Team Details:</h3>
+              <p><strong>Team:</strong> ${teamName}</p>
+              <p><strong>Role:</strong> ${role}</p>
+              <p><strong>Invited by:</strong> ${inviterName} (${user?.email || 'team member'})</p>
+            </div>
+            <p>Click the button below to accept the invitation:</p>
+            <a href="${window.location.origin}/invite-accept/${invitationId}" 
+               style="display: inline-block; background-color: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+              Accept Invitation
+            </a>
+            <p style="margin-top: 20px; font-size: 14px; color: #6b7280;">
+              This invitation expires in 7 days. If you have any questions, please contact ${inviterName}.
+            </p>
+          </div>
+        `,
+        textBody: `${inviterName} has invited you to join ${teamName} as a ${role}. Accept at: ${window.location.origin}/invite-accept/${invitationId}`
+      }, user?.uid); // Pass user ID for preferences
+
+      const success = emailResult.success;
 
       if (success) {
-        console.log('✅ Email sent successfully via Gmail API');
+        console.log('✅ Email sent successfully via Multi-Email Service!');
+        console.log('🎯 Provider used:', emailResult.provider);
+        console.log('📧 Message:', emailResult.message);
         return true;
       } else {
-        console.error('❌ Failed to send email via Gmail API');
+        console.error('❌ Failed to send email via Multi-Email Service');
+        console.error('📧 Error:', emailResult.error);
         return false;
       }
     } catch (error) {
-      console.error('❌ Error sending email via Gmail API:', error);
+      console.error('❌ Error sending email via Multi-Email Service:', error);
       return false;
     }
   };

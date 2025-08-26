@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { manualAuthService, ManualUserData } from '../services/manualAuthService';
+import { userPhoneService } from '../services/userPhoneService';
 
 const ManualRegistration: React.FC = () => {
   const navigate = useNavigate();
@@ -90,6 +91,18 @@ const ManualRegistration: React.FC = () => {
       const result = await manualAuthService.registerUser(userData, password);
       
       if (result.success) {
+        // 🚀 AUTO-SAVE PHONE NUMBER FROM REGISTRATION
+        if (phone.trim()) {
+          try {
+            // Use the user's UID from the result
+            const userId = result.user?.uid || email;
+            await userPhoneService.getPhoneFromRegistration(userId, phone.trim());
+            console.log('✅ ManualRegistration: Phone number automatically saved from registration!');
+          } catch (phoneError) {
+            console.warn('⚠️ ManualRegistration: Could not save phone number:', phoneError);
+          }
+        }
+        
         setSuccess(true);
         setLoading(false);
         
@@ -415,3 +428,5 @@ const ManualRegistration: React.FC = () => {
 };
 
 export default ManualRegistration;
+
+

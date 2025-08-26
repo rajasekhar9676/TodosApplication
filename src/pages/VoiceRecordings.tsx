@@ -26,6 +26,8 @@ const VoiceRecordings: React.FC = () => {
   useEffect(() => {
     if (!user) return;
 
+    let isMounted = true;
+
     const voiceNotesQuery = query(
       collection(db, 'voiceNotes'),
       where('userId', '==', user.uid),
@@ -33,15 +35,28 @@ const VoiceRecordings: React.FC = () => {
     );
 
     const unsubscribe = onSnapshot(voiceNotesQuery, (snapshot) => {
-      const notes = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as VoiceNote[];
-      setVoiceNotes(notes);
+      if (!isMounted) return;
+      
+      try {
+        const notes = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as VoiceNote[];
+        setVoiceNotes(notes);
+        setLoading(false);
+      } catch (error) {
+        console.error('Error processing voice notes:', error);
+        setLoading(false);
+      }
+    }, (error) => {
+      console.error('Error listening to voice notes:', error);
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, [user]);
 
   const handleDeleteNote = async (noteId: string) => {

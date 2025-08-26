@@ -38,7 +38,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             email: firebaseUser.email,
             displayName: firebaseUser.displayName || "",
             role: "member",
-            teams: []
+            teams: [],
+            phoneNumber: "", // Will be collected later
+            phoneNumberVerified: false,
+            dueDateReminder: true,
+            overdueReminder: true,
+            dailyDigest: false,
+            reminderTime: "09:00"
           });
           setRole("member");
         }

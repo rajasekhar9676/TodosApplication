@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { AdminAuthService } from '../services/adminAuthService';
 
 const AdminLogin: React.FC = () => {
-  const [email, setEmail] = useState('mrajasekhar9676@gmail.com');
-  const [password, setPassword] = useState('admin123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -68,6 +68,7 @@ const AdminLogin: React.FC = () => {
               name="email"
               type="email"
               required
+              autoComplete="off"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="appearance-none relative block w-full px-4 py-4 border border-gray-600 placeholder-gray-400 text-white bg-gray-800/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 focus:z-10 text-lg backdrop-blur-sm"
@@ -84,6 +85,7 @@ const AdminLogin: React.FC = () => {
               name="password"
               type="password"
               required
+              autoComplete="off"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="appearance-none relative block w-full px-4 py-4 border border-gray-600 placeholder-gray-400 text-white bg-gray-800/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 focus:z-10 text-lg backdrop-blur-sm"
@@ -120,7 +122,7 @@ const AdminLogin: React.FC = () => {
           </div>
         </form>
 
-        <div className="text-center p-4 bg-yellow-900/20 border border-yellow-500/30 rounded-lg">
+        {/* <div className="text-center p-4 bg-yellow-900/20 border border-yellow-500/30 rounded-lg">
           <p className="text-yellow-200 text-sm font-medium">
             🔑 Default Admin Credentials:
           </p>
@@ -132,7 +134,7 @@ const AdminLogin: React.FC = () => {
               Password: <code className="bg-yellow-900/50 px-2 py-1 rounded text-yellow-100">admin123</code>
             </p>
           </div>
-        </div>
+        </div> */}
       </div>
     </div>
   );

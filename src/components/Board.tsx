@@ -1,41 +1,110 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collection, onSnapshot, updateDoc, doc, deleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot, updateDoc, doc, deleteDoc, query, where, getDoc } from 'firebase/firestore';
 import { db } from '../config';
 import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
 import TopBar from './TopBar';
 import TaskItem from './TaskItem';
 import AddTaskForm from './AddTaskForm';
-
-interface Task {
-  id: string;
-  title: string;
-  dueDate: string;
-  status: 'TO-DO' | 'IN-PROGRESS' | 'COMPLETED';
-  category: string;
-}
+import { useAuth } from '../context/AuthContext';
+import { Task, Team } from '../types/task';
 
 const Board: React.FC = () => {
+  const { user } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [userTeams, setUserTeams] = useState<Team[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [taskToEdit, setTaskToEdit] = useState<Task | null>(null);
   const [selectedTasks, setSelectedTasks] = useState<string[]>([]);
   const [visibleTasks, setVisibleTasks] = useState(5);
   const [filterCategory, setFilterCategory] = useState('All');
   const [filterDueDate, setFilterDueDate] = useState('All');
+  const [filterTaskType, setFilterTaskType] = useState<'all' | 'individual' | 'team'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
 
+  // Fetch user teams
   useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, 'tasks'), (snapshot) => {
-      const taskData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Task[];
-      setTasks(taskData);
-    });
-    return () => unsubscribe();
-  }, []);
+    if (!user?.uid) return;
+
+    const fetchUserTeams = async () => {
+      try {
+        // Get user's teams from user document
+        const userRef = doc(db, 'users', user.uid);
+        const userSnap = await getDoc(userRef);
+        const userData = userSnap.data();
+
+        if (userData?.teams && userData.teams.length > 0) {
+          // Fetch team details for each team ID
+          const teamPromises = userData.teams.map(async (teamId: string) => {
+            const teamRef = doc(db, 'teams', teamId);
+            const teamSnap = await getDoc(teamRef);
+            if (teamSnap.exists()) {
+              return { id: teamId, ...teamSnap.data() };
+            }
+            return null;
+          });
+          
+          const teamsData = (await Promise.all(teamPromises)).filter(Boolean);
+          setUserTeams(teamsData);
+        }
+      } catch (error) {
+        console.error('Error fetching user teams:', error);
+      }
+    };
+
+    fetchUserTeams();
+  }, [user?.uid]);
+
+  // Fetch tasks
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    let tasksQuery;
+    
+    if (filterTaskType === 'individual') {
+      tasksQuery = query(
+        collection(db, 'tasks'),
+        where('createdBy', '==', user.uid),
+        where('taskType', '==', 'individual')
+      );
+    } else if (filterTaskType === 'team') {
+      const teamIds = userTeams.map(team => team.id);
+      if (teamIds.length > 0) {
+        tasksQuery = query(
+          collection(db, 'tasks'),
+          where('teamId', 'in', teamIds),
+          where('taskType', '==', 'team')
+        );
+      }
+    } else {
+      // All tasks - individual tasks created by user + team tasks from user's teams
+      const teamIds = userTeams.map(team => team.id);
+      if (teamIds.length > 0) {
+        tasksQuery = query(
+          collection(db, 'tasks'),
+          where('createdBy', '==', user.uid)
+        );
+        // Note: This is a simplified approach. For production, you might want to use multiple queries
+      } else {
+        tasksQuery = query(
+          collection(db, 'tasks'),
+          where('createdBy', '==', user.uid)
+        );
+      }
+    }
+
+    if (tasksQuery) {
+      const unsubscribe = onSnapshot(tasksQuery, (snapshot) => {
+        const taskData = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+        })) as Task[];
+        setTasks(taskData);
+      });
+      return () => unsubscribe();
+    }
+  }, [user?.uid, filterTaskType, userTeams]);
 
   const filteredTasks = tasks
     .filter(task => filterCategory === 'All' || task.category === filterCategory)
@@ -51,18 +120,28 @@ const Board: React.FC = () => {
     if (!destination) return;
 
     const task = tasks.find(t => t.id === result.draggableId);
-    if (!task) return;
+    if (!task || !task.id) return;
 
     const newStatus = destination.droppableId as 'TO-DO' | 'IN-PROGRESS' | 'COMPLETED';
     await updateDoc(doc(db, 'tasks', task.id), { status: newStatus });
   };
 
-  const handleSelectTask = (taskId: string) => {
+  const handleSelectTask = (task: Task) => {
+    const taskId = task.id;
+    if (!taskId) return;
+    
     if (selectedTasks.includes(taskId)) {
       setSelectedTasks(selectedTasks.filter(id => id !== taskId));
     } else {
       setSelectedTasks([...selectedTasks, taskId]);
     }
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    // Remove from selected tasks if it was selected
+    setSelectedTasks(selectedTasks.filter(id => id !== taskId));
+    // Refresh tasks after deletion
+    // The onSnapshot listener will automatically update the UI
   };
 
   const handleBulkStatusUpdate = async (newStatus: 'TO-DO' | 'IN-PROGRESS' | 'COMPLETED') => {
@@ -101,6 +180,46 @@ const Board: React.FC = () => {
           setSearchQuery={setSearchQuery}
           setShowForm={setShowForm}
         />
+
+        {/* Task Type Filter */}
+        <div className="px-8 pt-4">
+          <div className="flex items-center space-x-4 mb-4">
+            <span className="text-sm font-medium text-gray-700">Task Type:</span>
+            <div className="flex bg-gray-100 rounded-lg p-1">
+              <button
+                onClick={() => setFilterTaskType('all')}
+                className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
+                  filterTaskType === 'all'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                All Tasks
+              </button>
+              <button
+                onClick={() => setFilterTaskType('individual')}
+                className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
+                  filterTaskType === 'individual'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Individual
+              </button>
+              <button
+                onClick={() => setFilterTaskType('team')}
+                className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
+                  filterTaskType === 'team'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Team
+              </button>
+            </div>
+          </div>
+        </div>
+
         <div className="p-8">
           {showForm && (
             <div className="mb-4">
@@ -110,6 +229,7 @@ const Board: React.FC = () => {
                   setShowForm(false);
                   setTaskToEdit(null);
                 }}
+                userTeams={userTeams}
               />
             </div>
           )}
@@ -125,7 +245,7 @@ const Board: React.FC = () => {
                     ref={provided.innerRef}
                   >
                     <h3 className="font-semibold text-lg mb-3 bg-[#FAC3FF] p-2 rounded-md text-center">
-                      TO-DO
+                      TO-DO ({toDoTasks.length})
                     </h3>
                     {toDoTasks.length === 0 ? (
                       <div className="p-4 bg-white rounded-md text-center text-gray-500">
@@ -133,7 +253,7 @@ const Board: React.FC = () => {
                       </div>
                     ) : (
                       toDoTasks.map((task, index) => (
-                        <Draggable key={task.id} draggableId={task.id} index={index}>
+                        <Draggable key={task.id || `task-${index}`} draggableId={task.id || `task-${index}`} index={index}>
                           {(provided) => (
                             <div
                               ref={provided.innerRef}
@@ -146,7 +266,10 @@ const Board: React.FC = () => {
                                   setTaskToEdit(task);
                                   setShowForm(true);
                                 }}
-                                // No onSelect or isSelected in Board view to match design
+                                onDelete={handleDeleteTask}
+                                onSelect={handleSelectTask}
+                                isSelected={selectedTasks.includes(task.id || '')}
+                                showTaskType={true}
                               />
                             </div>
                           )}
@@ -175,7 +298,7 @@ const Board: React.FC = () => {
                     ref={provided.innerRef}
                   >
                     <h3 className="font-semibold text-lg mb-3 bg-[#85D9F1] p-2 rounded-md text-center">
-                      IN-PROGRESS
+                      IN-PROGRESS ({inProgressTasks.length})
                     </h3>
                     {inProgressTasks.length === 0 ? (
                       <div className="p-4 bg-white rounded-md text-center text-gray-500">
@@ -183,7 +306,7 @@ const Board: React.FC = () => {
                       </div>
                     ) : (
                       inProgressTasks.map((task, index) => (
-                        <Draggable key={task.id} draggableId={task.id} index={index}>
+                        <Draggable key={task.id || `task-${index}`} draggableId={task.id || `task-${index}`} index={index}>
                           {(provided) => (
                             <div
                               ref={provided.innerRef}
@@ -196,6 +319,10 @@ const Board: React.FC = () => {
                                   setTaskToEdit(task);
                                   setShowForm(true);
                                 }}
+                                onDelete={handleDeleteTask}
+                                onSelect={handleSelectTask}
+                                isSelected={selectedTasks.includes(task.id || '')}
+                                showTaskType={true}
                               />
                             </div>
                           )}
@@ -224,7 +351,7 @@ const Board: React.FC = () => {
                     ref={provided.innerRef}
                   >
                     <h3 className="font-semibold text-lg mb-3 bg-[#CEFFCC] p-2 rounded-md text-center">
-                      COMPLETED
+                      COMPLETED ({completedTasks.length})
                     </h3>
                     {completedTasks.length === 0 ? (
                       <div className="p-4 bg-white rounded-md text-center text-gray-500">
@@ -232,7 +359,7 @@ const Board: React.FC = () => {
                       </div>
                     ) : (
                       completedTasks.map((task, index) => (
-                        <Draggable key={task.id} draggableId={task.id} index={index}>
+                        <Draggable key={task.id || `task-${index}`} draggableId={task.id || `task-${index}`} index={index}>
                           {(provided) => (
                             <div
                               ref={provided.innerRef}
@@ -245,6 +372,10 @@ const Board: React.FC = () => {
                                   setTaskToEdit(task);
                                   setShowForm(true);
                                 }}
+                                onDelete={handleDeleteTask}
+                                onSelect={handleSelectTask}
+                                isSelected={selectedTasks.includes(task.id || '')}
+                                showTaskType={true}
                               />
                             </div>
                           )}

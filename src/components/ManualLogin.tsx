@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { manualAuthService, LoginCredentials } from '../services/manualAuthService';
 
 const ManualLogin: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
@@ -13,6 +16,14 @@ const ManualLogin: React.FC = () => {
   
   // Form validation
   const [errors, setErrors] = useState<{[key: string]: string}>({});
+  
+  // Redirect to intended destination if already authenticated
+  useEffect(() => {
+    if (user) {
+      const from = (location.state as any)?.from?.pathname || '/dashboard';
+      navigate(from, { replace: true });
+    }
+  }, [user, navigate, location]);
   
   const validateForm = (): boolean => {
     const newErrors: {[key: string]: string} = {};
@@ -56,8 +67,8 @@ const ManualLogin: React.FC = () => {
           sessionStorage.removeItem('pendingInvitationId');
           navigate(`/invite/accept/${pendingInvitationId}`);
         } else {
-          // Redirect to dashboard
-          navigate('/dashboard');
+          // The useEffect above will handle the redirect to intended destination
+          // or default to dashboard
         }
       } else {
         setError(result.error || 'Login failed');
@@ -245,6 +256,11 @@ const ManualLogin: React.FC = () => {
 };
 
 export default ManualLogin;
+
+
+
+
+
 
 
 

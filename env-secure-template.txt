@@ -1,0 +1,45 @@
+# 🔐 SECURE ADMIN CONFIGURATION TEMPLATE
+# Copy this file to .env and fill in your actual values
+# NEVER commit .env files to version control!
+
+# Admin Account Credentials (REQUIRED - Change these!)
+REACT_APP_SUPER_ADMIN_EMAIL=your_super_admin@yourdomain.com
+REACT_APP_SUPER_ADMIN_PASSWORD=your_secure_password_here
+REACT_APP_ADMIN_EMAIL=your_admin@yourdomain.com
+REACT_APP_ADMIN_PASSWORD=your_secure_password_here
+REACT_APP_MODERATOR_EMAIL=your_moderator@yourdomain.com
+REACT_APP_MODERATOR_PASSWORD=your_secure_password_here
+
+# Admin Account Display Names
+REACT_APP_SUPER_ADMIN_NAME=Super Administrator
+REACT_APP_ADMIN_NAME=Administrator
+REACT_APP_MODERATOR_NAME=Team Moderator
+
+# Email Service Configuration
+REACT_APP_GMAIL_CLIENT_ID=your_gmail_client_id
+REACT_APP_GMAIL_CLIENT_SECRET=your_gmail_client_secret
+REACT_APP_GMAIL_REFRESH_TOKEN=your_gmail_refresh_token
+
+# SMTP Configuration
+REACT_APP_SMTP_HOST=smtp.gmail.com
+REACT_APP_SMTP_PORT=587
+REACT_APP_SMTP_SECURE=false
+REACT_APP_SMTP_USER=your_smtp_email
+REACT_APP_SMTP_PASS=your_smtp_password
+
+# Other Services
+REACT_APP_RESEND_API_KEY=your_resend_api_key
+REACT_APP_RESEND_DOMAIN=your_domain.com
+REACT_APP_SENDGRID_API_KEY=your_sendgrid_api_key
+REACT_APP_SENDGRID_FROM_EMAIL=your_sendgrid_email
+
+# WhatsApp Integration
+REACT_APP_DOUBLE_TICK_API_KEY=your_whatsapp_api_key
+
+# Firebase Configuration
+REACT_APP_FIREBASE_API_KEY=your_firebase_api_key
+REACT_APP_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
+REACT_APP_FIREBASE_PROJECT_ID=your_project_id
+REACT_APP_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
+REACT_APP_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+REACT_APP_FIREBASE_APP_ID=your_app_id

@@ -45,17 +45,15 @@ const AppContent: React.FC = () => {
       <Route path="/admin_login" element={<AdminLogin />} />
       <Route path="/admin_dashboard" element={<AdminDashboard />} />
       
-      {/* User routes - require authentication */}
-      {!user ? (
-        <>
-          <Route path="/login" element={<SimpleAuth />} />
-          <Route path="/signin" element={<SignIn />} />
-          <Route path="/manual-login" element={<ManualLogin />} />
-          <Route path="/register" element={<ManualRegistration />} />
-          <Route path="/invite/accept/:invitationId" element={<InviteAccept />} />
-          <Route path="*" element={<Navigate to="/login" replace />} />
-        </>
-      ) : (
+      {/* Public routes - accessible without authentication */}
+      <Route path="/login" element={<SimpleAuth />} />
+      <Route path="/signin" element={<SignIn />} />
+      <Route path="/manual-login" element={<ManualLogin />} />
+      <Route path="/register" element={<ManualRegistration />} />
+      <Route path="/invite/accept/:invitationId" element={<InviteAccept />} />
+      
+      {/* Protected routes - require authentication */}
+      {user ? (
         <Route path="*" element={
           <Layout>
             <Routes>
@@ -68,12 +66,14 @@ const AppContent: React.FC = () => {
               <Route path="/whatsapp-reminders" element={<SimpleWhatsAppReminder />} />
               <Route path="/template-test" element={<TemplateTest />} />
               <Route path="/debug" element={<DebugPage />} />
-              <Route path="/invite/accept/:invitationId" element={<InviteAccept />} />
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
           </Layout>
         } />
+      ) : (
+        /* Redirect all other routes to login if not authenticated */
+        <Route path="*" element={<Navigate to="/login" replace />} />
       )}
     </Routes>
   );

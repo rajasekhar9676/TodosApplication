@@ -74,10 +74,18 @@ class UserPhoneService {
       const userData = userDoc.data();
       
       // Amazon-style: Use any available phone number (no manual verification required)
+      // Check both phoneNumber and phone fields for compatibility
       if (userData.phoneNumber) {
         console.log(`✅ UserPhone: Found phone number for user ${userId}: ${userData.phoneNumber}`);
         console.log(`📱 Source: ${userData.phoneSource || 'unknown'}`);
         return userData.phoneNumber;
+      }
+      
+      // Fallback to phone field for backward compatibility
+      if (userData.phone) {
+        console.log(`✅ UserPhone: Found phone (legacy field) for user ${userId}: ${userData.phone}`);
+        console.log(`📱 Source: legacy phone field`);
+        return userData.phone;
       }
       
       console.log(`⚠️ UserPhone: User ${userId} has no phone number available`);
@@ -151,5 +159,10 @@ class UserPhoneService {
 // Export singleton instance
 export const userPhoneService = new UserPhoneService();
 export default UserPhoneService;
+
+
+
+
+
 
 

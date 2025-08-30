@@ -96,7 +96,7 @@ const TypeSafeDashboard: React.FC = () => {
                 teamId: data.teamId || '',
                 teamName: data.teamName,
                 assignedTo: data.assignedTo,
-                status: data.status || 'todo',
+                status: data.status || 'pending',
                 priority: data.priority || 'medium',
                 dueDate: data.dueDate
               };
@@ -136,7 +136,7 @@ const TypeSafeDashboard: React.FC = () => {
   }
 
   return (
-    <div className={`max-w-7xl mx-auto p-6 space-y-6 ${isDarkTheme ? 'bg-gray-900' : 'bg-gray-50'}`}>
+    <div className={`max-w-7xl mx-auto space-y-6 ${isDarkTheme ? 'bg-gray-900' : 'bg-gray-50'}`}>
       {/* Dark Theme Toggle */}
       <div className="fixed top-4 right-4 z-50">
         <button
@@ -154,20 +154,80 @@ const TypeSafeDashboard: React.FC = () => {
       {/* Welcome Banner */}
       <div className={`${isDarkTheme ? 'bg-gradient-to-r from-purple-900 via-pink-800 to-purple-800' : 'bg-gradient-to-r from-blue-600 via-purple-600 to-blue-700'} rounded-2xl shadow-xl p-8 text-white`}>
         <div className="flex items-center justify-between">
-          <div>
+          <div className="flex-1">
             <h1 className="text-4xl font-bold mb-2">Welcome back!</h1>
             <p className="text-blue-100 text-xl">Here's what's happening with your personal tasks today.</p>
-          </div>
-          <div className="flex items-center space-x-4">
-            <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center">
-              <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
+            
+            {/* User Profile Section */}
+            <div className="mt-4 flex items-center space-x-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
+                  {user?.photoURL ? (
+                    <img 
+                      src={user.photoURL} 
+                      alt="Profile" 
+                      className="w-12 h-12 rounded-full object-cover"
+                    />
+                  ) : (
+                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  )}
+                </div>
+                <div>
+                  <p className="text-lg font-semibold text-white">
+                    {user?.displayName || user?.email?.split('@')[0] || 'User'}
+                  </p>
+                  <p className="text-blue-200 text-sm">
+                    {user?.email || 'No email available'}
+                  </p>
+                </div>
+              </div>
             </div>
+          </div>
+          
+          <div className="flex items-center space-x-4">
             <div className="text-right">
               <p className="text-blue-200">Today</p>
               <p className="text-2xl font-semibold">{new Date().toLocaleDateString()}</p>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* User Profile Card */}
+      <div className={`${isDarkTheme ? 'bg-gray-800 border-purple-500' : 'bg-white border-blue-500'} rounded-xl shadow-lg p-6 border-l-4`}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <div className={`w-16 h-16 rounded-full flex items-center justify-center ${isDarkTheme ? 'bg-purple-900 text-purple-400' : 'bg-blue-100 text-blue-600'}`}>
+              {user?.photoURL ? (
+                <img 
+                  src={user.photoURL} 
+                  alt="Profile" 
+                  className="w-16 h-16 rounded-full object-cover"
+                />
+              ) : (
+                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+              )}
+            </div>
+            <div>
+              <h3 className={`text-xl font-bold ${isDarkTheme ? 'text-white' : 'text-gray-900'}`}>
+                {user?.displayName || user?.email?.split('@')[0] || 'User'}
+              </h3>
+              <p className={`text-sm ${isDarkTheme ? 'text-purple-300' : 'text-gray-600'}`}>
+                {user?.email || 'No email available'}
+              </p>
+              <p className={`text-xs ${isDarkTheme ? 'text-purple-400' : 'text-blue-600'}`}>
+                User ID: {user?.uid?.slice(0, 8)}...
+              </p>
+            </div>
+          </div>
+          <div className={`text-right ${isDarkTheme ? 'text-purple-300' : 'text-blue-600'}`}>
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
           </div>
         </div>
       </div>
@@ -384,6 +444,71 @@ const TypeSafeDashboard: React.FC = () => {
                       Due: {task.dueDate?.toDate?.()?.toLocaleDateString() || 'Unknown'}
                     </span>
                   )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* My Assigned Tasks */}
+      <div className={`${isDarkTheme ? 'bg-gray-800' : 'bg-white'} rounded-xl shadow-lg p-6`}>
+        <div className="flex items-center justify-between mb-6">
+          <h2 className={`text-2xl font-bold ${isDarkTheme ? 'text-white' : 'text-gray-900'}`}>My Assigned Tasks</h2>
+          <Link to="/tasks" className={`font-medium flex items-center ${isDarkTheme ? 'text-purple-400 hover:text-purple-300' : 'text-blue-600 hover:text-blue-700'}`}>
+            View all tasks
+            <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+          </Link>
+        </div>
+        
+        {tasks.filter(task => task.assignedTo === user?.uid).length === 0 ? (
+          <p className={`text-center py-8 ${isDarkTheme ? 'text-gray-400' : 'text-gray-500'}`}>No tasks assigned to you yet. Check back later!</p>
+        ) : (
+          <div className="space-y-4">
+            {tasks.filter(task => task.assignedTo === user?.uid).slice(0, 8).map((task) => (
+              <div key={task.id} className={`flex items-center justify-between p-4 rounded-lg transition-colors border-l-4 ${
+                isDarkTheme ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-50 hover:bg-gray-100'
+              } ${
+                task.status === 'completed' ? (isDarkTheme ? 'border-green-500' : 'border-green-400') :
+                task.status === 'in-progress' ? (isDarkTheme ? 'border-yellow-500' : 'border-yellow-400') :
+                (isDarkTheme ? 'border-blue-500' : 'border-blue-400')
+              }`}>
+                <div className="flex-1">
+                  <h3 className={`font-medium ${isDarkTheme ? 'text-white' : 'text-gray-900'}`}>{task.title}</h3>
+                  <p className={`text-sm ${isDarkTheme ? 'text-gray-300' : 'text-gray-600'}`}>
+                    {task.teamName || 'Unknown Team'} • Assigned to you
+                  </p>
+                  {task.dueDate && (
+                    <p className={`text-xs mt-1 ${isDarkTheme ? 'text-gray-400' : 'text-gray-500'}`}>
+                      Due: {task.dueDate?.toDate?.()?.toLocaleDateString() || 'Unknown'}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center space-x-3">
+                  <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${
+                    task.status === 'completed' ? (isDarkTheme ? 'bg-green-900 text-green-300' : 'bg-green-100 text-green-800') :
+                    task.status === 'in-progress' ? (isDarkTheme ? 'bg-yellow-900 text-yellow-300' : 'bg-yellow-100 text-yellow-800') :
+                    (isDarkTheme ? 'bg-blue-900 text-blue-300' : 'bg-blue-100 text-blue-800')
+                  }`}>
+                    {task.status}
+                  </span>
+                  <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${
+                    task.priority === 'high' ? (isDarkTheme ? 'bg-red-900 text-red-300' : 'bg-red-100 text-red-800') :
+                    task.priority === 'medium' ? (isDarkTheme ? 'bg-yellow-900 text-yellow-300' : 'bg-yellow-100 text-yellow-800') :
+                    (isDarkTheme ? 'bg-green-900 text-green-300' : 'bg-green-100 text-green-800')
+                  }`}>
+                    {task.priority}
+                  </span>
+                  <Link 
+                    to={`/tasks?view=${task.id}`}
+                    className={`px-3 py-1 text-xs font-medium rounded-lg transition-colors ${
+                      isDarkTheme ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'
+                    }`}
+                  >
+                    View
+                  </Link>
                 </div>
               </div>
             ))}

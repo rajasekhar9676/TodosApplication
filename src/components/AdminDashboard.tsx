@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AdminAuthService } from '../services/adminAuthService';
+import { MultiAdminService, AdminUser } from '../services/multiAdminService';
 import { adminWhatsAppService } from '../services/adminWhatsAppService';
 import { db } from '../config';
 import { collection, getDocs, doc, getDoc, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import CreateUserForm from './CreateUserForm';
+import AdminManagement from './AdminManagement';
 
 // Admin interfaces
 interface AdminStats {
@@ -19,6 +21,8 @@ interface UserData {
   id: string;
   displayName: string;
   email: string;
+  phone?: string;
+  phoneNumber?: string;
   teams: string[];
   totalTasks: number;
   completedTasks: number;
@@ -111,17 +115,28 @@ const AdminDashboard: React.FC = () => {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   
-
+  // Create user form modal state
+  const [showCreateUserModal, setShowCreateUserModal] = useState(false);
   
   // Dark theme state
   const [isDarkTheme, setIsDarkTheme] = useState(false);
+  
+  // Current admin user state
+  const [currentAdmin, setCurrentAdmin] = useState<AdminUser | null>(null);
+  
+  // Admin management modal state
+  const [showAdminManagement, setShowAdminManagement] = useState(false);
 
   useEffect(() => {
-    // Check admin status using the service
-    if (!AdminAuthService.isAdmin()) {
+    // Check admin status using the new service
+    if (!MultiAdminService.isAdmin()) {
       navigate('/admin_login');
       return;
     }
+    
+    // Get current admin user
+    const admin = MultiAdminService.getCurrentAdmin();
+    setCurrentAdmin(admin);
     
     // Initialize WhatsApp service
     const apiKey = process.env.REACT_APP_DOUBLE_TICK_API_KEY || 'key_XAKKhG3Xdz';
@@ -138,7 +153,7 @@ const AdminDashboard: React.FC = () => {
       setLoading(true);
       
       // Check admin status
-      if (!AdminAuthService.isAdmin()) {
+      if (!MultiAdminService.isAdmin()) {
         navigate('/admin_login');
         return;
       }
@@ -167,6 +182,8 @@ const AdminDashboard: React.FC = () => {
             id: userDoc.id,
             displayName: userData.displayName || userData.name || 'Unknown User',
             email: userData.email || 'No email',
+            phone: userData.phone || null,
+            phoneNumber: userData.phoneNumber || null,
             teams: userData.teams || userData.joinedTeams || [],
             totalTasks: 0,
             completedTasks: 0,
@@ -276,16 +293,16 @@ const AdminDashboard: React.FC = () => {
          // Check if it's a permissions error
          if (firestoreError.code === 'permission-denied') {
           console.log('🔒 Admin: Permission denied - checking if we need to create admin account');
-          // Try to create admin account if it doesn't exist
+          // Try to initialize default admin accounts if they don't exist
           try {
-            await AdminAuthService.ensureAdminAccount();
+            await MultiAdminService.initializeDefaultAdmins();
             // Retry loading data
-            console.log('🔄 Admin: Retrying data load after account creation...');
+            console.log('🔄 Admin: Retrying data load after admin initialization...');
             // Recursive call to retry
             setTimeout(() => loadAdminData(), 1000);
             return;
           } catch (createError) {
-            console.error('❌ Admin: Failed to create admin account:', createError);
+            console.error('❌ Admin: Failed to initialize admin accounts:', createError);
           }
         }
         
@@ -298,7 +315,7 @@ const AdminDashboard: React.FC = () => {
       console.error('❌ Admin: Error loading admin data:', error);
       
       // Only redirect if admin session is lost
-      if (!AdminAuthService.isAdmin()) {
+      if (!MultiAdminService.isAdmin()) {
         console.log('🔐 Admin: Admin session lost, redirecting to login');
         navigate('/admin_login');
         return;
@@ -549,7 +566,7 @@ const AdminDashboard: React.FC = () => {
   };
 
   const handleLogout = () => {
-    AdminAuthService.logoutAdmin();
+    MultiAdminService.logoutAdmin();
     navigate('/admin_login');
   };
 
@@ -1032,9 +1049,35 @@ const AdminDashboard: React.FC = () => {
                     >
                       🔄 Refresh Data
                     </button>
+                    
+                    {/* Admin Management Button - Only show for super admins and admins */}
+                    {(currentAdmin?.role === 'super_admin' || currentAdmin?.role === 'admin') && (
+                      <button
+                        onClick={() => setShowAdminManagement(true)}
+                        className="px-4 lg:px-6 py-2 lg:py-3 bg-orange-500 hover:bg-orange-600 rounded-xl transition-all duration-200 text-white font-medium shadow-lg hover:shadow-xl text-sm lg:text-base"
+                      >
+                        👥 Manage Admins
+                      </button>
+                    )}
                     <div className="text-left sm:text-right">
                       <p className="text-blue-200 text-sm lg:text-base">Welcome back,</p>
-                      <p className="text-lg lg:text-2xl font-semibold">{adminEmail || 'Administrator'}</p>
+                      <p className="text-lg lg:text-2xl font-semibold">
+                        {currentAdmin?.displayName || adminEmail || 'Administrator'}
+                      </p>
+                      {currentAdmin && (
+                        <div className="flex items-center space-x-2 mt-1">
+                          <span className={`px-2 py-1 text-xs rounded-full ${
+                            currentAdmin.role === 'super_admin' ? 'bg-red-500 text-white' :
+                            currentAdmin.role === 'admin' ? 'bg-blue-500 text-white' :
+                            'bg-green-500 text-white'
+                          }`}>
+                            {currentAdmin.role.replace('_', ' ').toUpperCase()}
+                          </span>
+                          <span className="text-blue-200 text-xs">
+                            {currentAdmin.email}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                </div>
@@ -1223,7 +1266,18 @@ const AdminDashboard: React.FC = () => {
                                    {viewMode === 'users' && (
             <div className="space-y-6">
               <div className={`${isDarkTheme ? 'bg-gray-800' : 'bg-white'} rounded-xl shadow-lg p-4 lg:p-6`}>
-                <h2 className={`text-xl lg:text-2xl font-bold mb-4 lg:mb-6 ${isDarkTheme ? 'text-white' : 'text-gray-900'}`}>Users Overview</h2>
+                <div className="flex items-center justify-between mb-4 lg:mb-6">
+                  <h2 className={`text-xl lg:text-2xl font-bold ${isDarkTheme ? 'text-white' : 'text-gray-900'}`}>Users Overview</h2>
+                  <button
+                    onClick={() => setShowCreateUserModal(true)}
+                    className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
+                  >
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                    Create User
+                  </button>
+                </div>
                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
                 {users.map((user) => (
                   <div 
@@ -1243,7 +1297,10 @@ const AdminDashboard: React.FC = () => {
                       </span>
                     </div>
                     <h3 className="text-lg font-semibold text-gray-900 mb-2">{user.displayName}</h3>
-                    <p className="text-sm text-gray-600 mb-4">{user.email}</p>
+                    <p className="text-sm text-gray-600 mb-2">{user.email}</p>
+                    <p className="text-sm text-gray-500 mb-4">
+                      📱 {user.phoneNumber || user.phone || 'No phone'}
+                    </p>
                     <div className="space-y-2">
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-600">Total Tasks:</span>
@@ -1768,6 +1825,24 @@ const AdminDashboard: React.FC = () => {
               </div>
             </div>
           )}
+
+          {/* Create User Form Modal */}
+          <CreateUserForm
+            isOpen={showCreateUserModal}
+            onClose={() => setShowCreateUserModal(false)}
+            onUserCreated={() => {
+              setShowCreateUserModal(false);
+              loadAdminData(); // Refresh the users list
+              setSuccessMessage('User created successfully! 🎉');
+              setShowSuccessModal(true);
+            }}
+          />
+
+          {/* Admin Management Modal */}
+          <AdminManagement
+            isOpen={showAdminManagement}
+            onClose={() => setShowAdminManagement(false)}
+          />
        </div>
      </div>
    );

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AdminAuthService } from '../services/adminAuthService';
+import { MultiAdminService } from '../services/multiAdminService';
 
 const AdminLogin: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -9,10 +9,10 @@ const AdminLogin: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  // Ensure admin account exists on component mount
+  // Initialize default admin accounts on component mount
   useEffect(() => {
-    AdminAuthService.ensureAdminAccount().catch((error) => {
-      console.error('Failed to ensure admin account on mount:', error);
+    MultiAdminService.initializeDefaultAdmins().catch((error) => {
+      console.error('Failed to initialize default admin accounts on mount:', error);
       // Don't show error to user here, they can still try to login
     });
   }, []);
@@ -23,8 +23,8 @@ const AdminLogin: React.FC = () => {
     setError('');
 
     try {
-      // Use AdminAuthService for proper authentication
-      const result = await AdminAuthService.loginAdmin(email, password);
+      // Use MultiAdminService for proper authentication
+      const result = await MultiAdminService.loginAdmin(email, password);
       
       if (result.success) {
         navigate('/admin_dashboard');
@@ -55,6 +55,17 @@ const AdminLogin: React.FC = () => {
             <p className="text-red-200 text-sm">
               ⚠️ Restricted Area - Admin Only
             </p>
+          </div>
+          
+          {/* Secure Admin Access Info */}
+          <div className="mt-4 p-4 bg-blue-900/30 border border-blue-500/30 rounded-lg">
+            <h3 className="text-blue-200 text-sm font-semibold mb-2">🔒 Secure Admin Access</h3>
+            <div className="space-y-2 text-xs text-blue-200">
+              <p>• Contact your system administrator for credentials</p>
+              <p>• Do not share admin credentials</p>
+              <p>• Use strong, unique passwords</p>
+              <p>• Enable 2FA if available</p>
+            </div>
           </div>
         </div>
 
@@ -122,19 +133,16 @@ const AdminLogin: React.FC = () => {
           </div>
         </form>
 
-        {/* <div className="text-center p-4 bg-yellow-900/20 border border-yellow-500/30 rounded-lg">
+        {/* Security Notice */}
+        <div className="text-center p-4 bg-yellow-900/20 border border-yellow-500/30 rounded-lg">
           <p className="text-yellow-200 text-sm font-medium">
-            🔑 Default Admin Credentials:
+            🔒 Security Notice
           </p>
-          <div className="mt-2 space-y-1">
-            <p className="text-yellow-200 text-xs">
-              Email: <code className="bg-yellow-900/50 px-2 py-1 rounded text-yellow-100">mrajasekhar9676@gmail.com</code>
-            </p>
-            <p className="text-yellow-200 text-xs">
-              Password: <code className="bg-yellow-900/50 px-2 py-1 rounded text-yellow-100">admin123</code>
-            </p>
-          </div>
-        </div> */}
+          <p className="text-yellow-200 text-xs mt-1">
+            Admin credentials are managed securely through environment configuration.
+            Contact your system administrator for access.
+          </p>
+        </div>
       </div>
     </div>
   );

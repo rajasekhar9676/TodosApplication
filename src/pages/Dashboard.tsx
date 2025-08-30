@@ -5,6 +5,7 @@ import { doc, getDoc, collection, query, orderBy, limit, addDoc, serverTimestamp
 import { useAuth } from '../context/AuthContext';
 import { Task } from '../types/task';
 import PhoneNumberCollector from '../components/PhoneNumberCollector';
+import NotificationButton from '../components/NotificationButton';
 
 interface Team {
   id: string;
@@ -582,17 +583,53 @@ const Dashboard: React.FC = () => {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
       {/* Welcome Banner - Full Width with No Margins */}
       <div className="w-full mb-6">
-        <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-2xl p-8 text-white shadow-xl mx-4">
+        <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-2xl p-8 text-white shadow-xl">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-4xl font-bold mb-2">Welcome back!</h1>
               <p className="text-blue-100 text-lg">Here's what's happening with your personal tasks today.</p>
             </div>
-            <div className="hidden md:block">
-              <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
-                <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>
+            <div className="flex items-center space-x-4">
+              {/* Test Button - Always visible */}
+              <div className="block">
+                <button
+                  onClick={() => alert('Test button works!')}
+                  className="bg-green-500 text-white px-4 py-2 rounded-lg font-bold text-lg border-4 border-green-300 shadow-xl"
+                  style={{ minWidth: '120px', minHeight: '60px' }}
+                >
+                  🧪 TEST
+                </button>
+              </div>
+              
+              {/* Notification Button - Visible on all screen sizes */}
+              <div className="block">
+                <NotificationButton />
+              </div>
+              
+              {/* Fallback Notification Button - Always visible for debugging */}
+              <div className="block">
+                <button
+                  onClick={() => alert('Fallback notification button clicked!')}
+                  className="relative inline-flex items-center justify-center p-3 text-white hover:text-blue-200 transition-all duration-200 rounded-xl hover:bg-white/20 border-2 border-red-400 hover:border-red-300 bg-red-600/20"
+                  title="Fallback Notifications"
+                  style={{ minWidth: '60px', minHeight: '60px' }}
+                >
+                  <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/>
+                  </svg>
+                  <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-bold">
+                    !
+                  </span>
+                </button>
+              </div>
+              
+              {/* Avatar Icon */}
+              <div className="hidden md:block">
+                <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
+                  <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                </div>
               </div>
             </div>
           </div>
@@ -600,7 +637,7 @@ const Dashboard: React.FC = () => {
       </div>
 
       {/* Stats Cards - Full Width Grid */}
-      <div className="px-4 mb-6">
+      <div className="mb-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-gray-200/50 dark:border-slate-700/50 p-6 hover:shadow-xl transition-all duration-300 hover:scale-105">
             <div className="flex items-center">
@@ -660,8 +697,21 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
+      {/* Mobile Notification Button - Visible only on mobile */}
+      <div className="mb-4 md:hidden">
+        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-gray-200/50 dark:border-slate-700/50 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white">Task Notifications</h3>
+              <p className="text-gray-600 dark:text-gray-300 text-sm">Check your assigned tasks</p>
+            </div>
+            <NotificationButton />
+          </div>
+        </div>
+      </div>
+
       {/* Quick Actions - Full Width Grid */}
-      <div className="px-4 mb-6">
+      <div className="mb-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Link
             to="/tasks"
@@ -720,7 +770,7 @@ const Dashboard: React.FC = () => {
       </div>
 
       {/* Teams Section - Full Width */}
-      <div className="px-4 mb-6">
+      <div className="mb-6">
         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-gray-200/50 dark:border-slate-700/50">
           <div className="p-6 border-b border-gray-200/50 dark:border-slate-700/50">
             <div className="flex items-center justify-between">
@@ -842,7 +892,7 @@ const Dashboard: React.FC = () => {
 
       {/* Recent Tasks Section - Full Width */}
       {recentTasks.length > 0 && (
-        <div className="px-4 mb-6">
+        <div className="mb-6">
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-gray-200/50 dark:border-slate-700/50">
             <div className="p-6 border-b border-gray-200/50 dark:border-slate-700/50">
               <div className="flex items-center justify-between">
@@ -898,7 +948,7 @@ const Dashboard: React.FC = () => {
 
       {/* Voice Notes Section - Hidden in Production */}
       {!isProductionMode && (
-        <div className="px-4 mb-6">
+        <div className="mb-6">
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-gray-200/50 dark:border-slate-700/50">
             <div className="p-6 border-b border-gray-200/50 dark:border-slate-700/50">
               <div className="flex items-center justify-between">

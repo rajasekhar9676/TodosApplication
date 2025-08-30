@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { auth, db } from '../../config';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import ErrorDisplay from '../ErrorDisplay';
 import { signOut } from 'firebase/auth';
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { addDoc, serverTimestamp } from 'firebase/firestore';
 import SpeechToText from '../SpeechToText';
 import TextToSpeech from '../TextToSpeech';
 import DocumentProcessor from '../DocumentProcessor';
@@ -11,6 +12,7 @@ import Toast from '../Toast';
 import GmailConnection from '../GmailConnection';
 import GoogleWorkspaceSetup from '../GoogleWorkspaceSetup';
 import MultiEmailSetup from '../MultiEmailSetup';
+import NotificationPanel from '../NotificationPanel';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -21,6 +23,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [showGmailConnection, setShowGmailConnection] = useState(false);
+  const [isNotificationPanelOpen, setIsNotificationPanelOpen] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -55,6 +59,28 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   React.useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode);
   }, [darkMode]);
+
+  // Fetch pending tasks count
+  useEffect(() => {
+    const currentUser = auth.currentUser;
+    if (!currentUser?.uid) return;
+
+    const unsubscribe = onSnapshot(
+      query(
+        collection(db, 'tasks'),
+        where('assignedTo', '==', currentUser.uid),
+        where('status', '!=', 'completed')
+      ),
+      (snapshot) => {
+        setPendingCount(snapshot.size);
+      },
+      (error) => {
+        console.error('Error fetching pending tasks count:', error);
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -124,6 +150,24 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             </div>
           </nav>
 
+          {/* Notification Button */}
+          <div className="mt-6 px-6">
+            <button
+              onClick={() => setIsNotificationPanelOpen(true)}
+              className="w-full flex items-center px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-slate-700 rounded-xl transition-all duration-200 hover:shadow-md relative"
+            >
+              <svg className="w-5 h-5 mr-3 text-gray-500 dark:text-gray-400" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/>
+              </svg>
+              Notifications
+              {pendingCount > 0 && (
+                <span className="ml-auto bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium animate-pulse">
+                  {pendingCount > 99 ? '99+' : pendingCount}
+                </span>
+              )}
+            </button>
+          </div>
+
           {/* Gmail Connection Section */}
           {auth.currentUser && (
             <div className="mt-6 px-6">
@@ -160,6 +204,35 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               )}
             </div>
           )}
+
+          {/* User Profile Section */}
+          <div className="mt-auto px-6 mb-20">
+            <div className="bg-gray-50 dark:bg-slate-700/50 rounded-xl p-4 border border-gray-200/50 dark:border-slate-600/50">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                  {auth.currentUser?.photoURL ? (
+                    <img 
+                      src={auth.currentUser.photoURL} 
+                      alt="Profile" 
+                      className="w-10 h-10 rounded-full object-cover"
+                    />
+                  ) : (
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                    {auth.currentUser?.displayName || auth.currentUser?.email?.split('@')[0] || 'User'}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                    {auth.currentUser?.email || 'No email'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
 
           <div className="absolute bottom-0 left-0 right-0 p-6">
             <button
@@ -207,9 +280,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             </div>
           </div>
 
-          {/* Page content - Full width dashboard with no margins */}
-          <main className="flex-1 p-0 overflow-auto max-w-none">
-            <div className="w-full">
+          {/* Page content - Dashboard with proper margins */}
+          <main className="flex-1 overflow-auto">
+            <div className="w-full px-6 py-6 lg:px-8 lg:py-8 lg:pr-12 pb-12">
               {children}
             </div>
           </main>
@@ -244,6 +317,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
       {/* Error Display */}
       <ErrorDisplay />
+
+      {/* Notification Panel */}
+      <NotificationPanel
+        isOpen={isNotificationPanelOpen}
+        onClose={() => setIsNotificationPanelOpen(false)}
+      />
     </div>
   );
 };

@@ -153,3 +153,9 @@ Your WhatsApp integration is now fully configured with the approved template. Ev
 **No more custom message generation - everything goes through your approved Double Tick template!** 📱✨
 
 
+
+
+
+
+
+

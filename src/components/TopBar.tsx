@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth } from '../config';
+import { auth, db } from '../config';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import NotificationPanel from './NotificationPanel';
 
 export interface TopBarProps {
   filterCategory: string;
@@ -26,6 +28,8 @@ const TopBar: React.FC<TopBarProps> = ({
   const [userName, setUserName] = useState<string | null>(null);
   const [userPhoto, setUserPhoto] = useState<string | null>(null);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [isNotificationPanelOpen, setIsNotificationPanelOpen] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
     const currentUser = auth.currentUser;
@@ -35,6 +39,28 @@ const TopBar: React.FC<TopBarProps> = ({
     } else {
       setUserName(localStorage.getItem('email')?.split('@')[0] || 'User');
     }
+  }, []);
+
+  // Fetch pending tasks count
+  useEffect(() => {
+    const currentUser = auth.currentUser;
+    if (!currentUser?.uid) return;
+
+    const unsubscribe = onSnapshot(
+      query(
+        collection(db, 'tasks'),
+        where('assignedTo', '==', currentUser.uid),
+        where('status', '!=', 'completed')
+      ),
+      (snapshot) => {
+        setPendingCount(snapshot.size);
+      },
+      (error) => {
+        console.error('Error fetching pending tasks count:', error);
+      }
+    );
+
+    return () => unsubscribe();
   }, []);
 
   const handleLogout = async () => {
@@ -68,29 +94,78 @@ const TopBar: React.FC<TopBarProps> = ({
             TaskBuddy
           </h1>
 
-          {/* User Profile */}
-          <div className="relative">
-            <button
-              onClick={() => setShowProfileMenu(!showProfileMenu)}
-              className="sm:hidden"
-            >
-              {userPhoto ? (
-                <img
-                  src={userPhoto}
-                  alt="User"
-                  className="w-7 h-7 rounded-full object-cover"
+          {/* User Profile and Notifications */}
+          <div className="flex items-center space-x-3">
+            {/* Notification Button */}
+            <div className="hidden sm:block">
+              <div className="relative">
+                <button
+                  onClick={() => setIsNotificationPanelOpen(!isNotificationPanelOpen)}
+                  className="relative inline-flex items-center justify-center p-2 text-gray-600 hover:text-blue-600 transition-colors rounded-lg hover:bg-gray-100"
+                  title="Task Notifications"
+                >
+                  {/* Bell Icon - More prominent */}
+                  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/>
+                  </svg>
+                  
+                  {/* Notification Badge */}
+                  {pendingCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium animate-pulse border-2 border-white">
+                      {pendingCount > 99 ? '99+' : pendingCount}
+                    </span>
+                  )}
+                </button>
+                
+                {/* Notification Panel */}
+                <NotificationPanel
+                  isOpen={isNotificationPanelOpen}
+                  onClose={() => setIsNotificationPanelOpen(false)}
                 />
-              ) : (
-                <div className="w-7 h-7 rounded-full bg-gray-300 flex items-center justify-center">
-                  <span className="text-gray-600 text-xs">
-                    {userName?.charAt(0).toUpperCase()}
-                  </span>
-                </div>
-              )}
-            </button>
-            {/* Profile Menu (Mobile Only) */}
+              </div>
+            </div>
+            
+            {/* User Profile */}
+            <div className="relative">
+              <button
+                onClick={() => setShowProfileMenu(!showProfileMenu)}
+                className="sm:hidden"
+              >
+                {userPhoto ? (
+                  <img
+                    src={userPhoto}
+                    alt="User"
+                    className="w-7 h-7 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="w-7 h-7 rounded-full bg-gray-300 flex items-center justify-center">
+                    <span className="text-gray-600 text-xs">
+                      {userName?.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                )}
+              </button>
+                          {/* Profile Menu (Mobile Only) */}
             {showProfileMenu && (
-              <div className="absolute right-0 mt-2 w-32 bg-white rounded-md shadow-lg z-10 sm:hidden">
+              <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 sm:hidden">
+                {/* Notification Button in Mobile Menu */}
+                <button
+                  onClick={() => {
+                    setIsNotificationPanelOpen(true);
+                    setShowProfileMenu(false);
+                  }}
+                  className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                >
+                  <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/>
+                  </svg>
+                  Notifications
+                  {pendingCount > 0 && (
+                    <span className="ml-auto bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium">
+                      {pendingCount > 99 ? '99+' : pendingCount}
+                    </span>
+                  )}
+                </button>
                 <button
                   onClick={handleLogout}
                   className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
@@ -99,22 +174,23 @@ const TopBar: React.FC<TopBarProps> = ({
                 </button>
               </div>
             )}
-            {/* Desktop View: Show username only */}
-            <div className="hidden sm:flex items-center space-x-2">
-              {userPhoto ? (
-                <img
-                  src={userPhoto}
-                  alt="User"
-                  className="w-7 h-7 rounded-full object-cover"
-                />
-              ) : (
-                <div className="w-7 h-7 rounded-full bg-gray-300 flex items-center justify-center">
-                  <span className="text-gray-600 text-xs">
-                    {userName?.charAt(0).toUpperCase()}
-                  </span>
-                </div>
-              )}
-              <p className="text-gray-600 text-sm">{userName}</p>
+              {/* Desktop View: Show username only */}
+              <div className="hidden sm:flex items-center space-x-2">
+                {userPhoto ? (
+                  <img
+                    src={userPhoto}
+                    alt="User"
+                    className="w-7 h-7 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="w-7 h-7 rounded-full bg-gray-300 flex items-center justify-center">
+                    <span className="text-gray-600 text-xs">
+                      {userName?.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                )}
+                <p className="text-gray-600 text-sm">{userName}</p>
+              </div>
             </div>
           </div>
         </div>

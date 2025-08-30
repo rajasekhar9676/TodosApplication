@@ -1,13 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { auth } from '../config';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 const SimpleAuth: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
+  const location = useLocation();
+  const { user } = useAuth();
+
+  // Redirect to intended destination if already authenticated
+  useEffect(() => {
+    if (user) {
+      const from = (location.state as any)?.from?.pathname || '/dashboard';
+      navigate(from, { replace: true });
+    }
+  }, [user, navigate, location]);
 
   const handleGoogleSignIn = async () => {
     setLoading(true);
@@ -16,6 +26,7 @@ const SimpleAuth: React.FC = () => {
     try {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
+      // The useEffect above will handle the redirect
     } catch (error: any) {
       console.error('Google sign-in error:', error);
       setError(error.message || 'Failed to sign in with Google');

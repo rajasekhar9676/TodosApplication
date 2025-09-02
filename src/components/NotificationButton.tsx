@@ -28,8 +28,10 @@ const NotificationButton: React.FC = () => {
         where('status', '!=', 'completed')
       ),
       (snapshot) => {
-        console.log('🔔 NotificationButton: Firestore update, pending tasks:', snapshot.size);
-        setPendingCount(snapshot.size);
+        // Only count unread tasks (tasks without readAt field)
+        const unreadTasks = snapshot.docs.filter(doc => !doc.data().readAt);
+        console.log('🔔 NotificationButton: Firestore update, unread pending tasks:', unreadTasks.length);
+        setPendingCount(unreadTasks.length);
       },
       (error) => {
         console.error('❌ NotificationButton: Error fetching pending tasks count:', error);
@@ -45,6 +47,8 @@ const NotificationButton: React.FC = () => {
   const handleNotificationClick = () => {
     console.log('🔔 NotificationButton: Clicked, opening panel');
     setIsNotificationPanelOpen(true);
+    // Clear the notification count when panel is opened
+    setPendingCount(0);
   };
 
   // Always render the button, even if there's no user (for debugging)

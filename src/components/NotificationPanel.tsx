@@ -30,6 +30,17 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, onClose }
   const [filter, setFilter] = useState<'all' | 'pending' | 'completed'>('all');
   const [sortBy, setSortBy] = useState<'dueDate' | 'priority' | 'createdAt'>('dueDate');
 
+  // Function to mark task as read
+  const markTaskAsRead = async (taskId: string) => {
+    try {
+      await updateDoc(doc(db, 'tasks', taskId), {
+        readAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error('Error marking task as read:', error);
+    }
+  };
+
   // Helper function to format dates properly
   const formatDate = (dateValue: any): string => {
     if (!dateValue) return 'No due date';
@@ -305,7 +316,8 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, onClose }
               {sortedTasks.map((task) => (
                 <div
                   key={task.id}
-                  className="bg-gray-50 dark:bg-slate-700/50 rounded-xl p-6 border border-gray-200/50 dark:border-slate-600/50 hover:shadow-md transition-all duration-200"
+                  className="bg-gray-50 dark:bg-slate-700/50 rounded-xl p-6 border border-gray-200/50 dark:border-slate-600/50 hover:shadow-md transition-all duration-200 cursor-pointer"
+                  onClick={() => markTaskAsRead(task.id)}
                 >
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex-1">

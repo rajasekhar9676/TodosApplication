@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { Task } from '../types/task';
 import PhoneNumberCollector from '../components/PhoneNumberCollector';
 import NotificationButton from '../components/NotificationButton';
+import TaskCountDebugger from '../components/TaskCountDebugger';
 
 interface Team {
   id: string;
@@ -229,6 +230,7 @@ const Dashboard: React.FC = () => {
   const [allTasks, setAllTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAllTasksModal, setShowAllTasksModal] = useState(false);
+  const [showDebugger, setShowDebugger] = useState(false);
 
   // Enhanced error handling for data fetching
   const fetchDashboardData = useCallback(async () => {
@@ -326,13 +328,12 @@ const Dashboard: React.FC = () => {
       
       const allTasks: any[] = [];
       
-      // 1. Fetch individual tasks created by the user
+      // 1. Fetch individual tasks created by the user (same as Tasks component)
       try {
         const individualTasksQuery = query(
           collection(db, 'tasks'),
           where('createdBy', '==', user.uid),
-          orderBy('createdAt', 'desc'),
-          limit(50)
+          where('taskType', '==', 'individual')
         );
         
         const individualTasksSnap = await getDocs(individualTasksQuery);
@@ -347,58 +348,83 @@ const Dashboard: React.FC = () => {
         console.error('❌ Dashboard: Error fetching individual tasks:', error);
       }
       
-      // 2. Fetch team tasks if user has teams
+      // 2. Fetch team tasks from user's teams (same as Tasks component)
       if (teams.length > 0) {
-        for (const teamId of teams) {
-          try {
-            const tasksQuery = query(
+        try {
+          const teamIds = teams.map(team => typeof team === 'string' ? team : team.id);
+          console.log('📋 Dashboard: Fetching team tasks for teams:', teamIds);
+          
+          if (teamIds.length > 0) {
+            const teamTasksQuery = query(
               collection(db, 'tasks'),
-              where('teamId', '==', teamId),
-              orderBy('createdAt', 'desc'),
-              limit(50)
+              where('teamId', 'in', teamIds),
+              where('taskType', '==', 'team')
             );
             
-            const tasksSnap = await getDocs(tasksQuery);
-            const teamTasks = tasksSnap.docs.map(doc => ({
+            const teamTasksSnap = await getDocs(teamTasksQuery);
+            const teamTasks = teamTasksSnap.docs.map(doc => ({
               id: doc.id,
               ...doc.data()
             }));
             
-            console.log(`📋 Dashboard: Team ${teamId} - All tasks: ${teamTasks.length}, User tasks: ${teamTasks.filter((task: any) => task.assignedTo === user.uid).length}`);
-            
+            console.log(`📋 Dashboard: Team tasks found: ${teamTasks.length}`);
             allTasks.push(...teamTasks);
-          } catch (error) {
-            console.error('❌ Dashboard: Error fetching tasks for team:', teamId, error);
           }
+        } catch (error) {
+          console.error('❌ Dashboard: Error fetching team tasks:', error);
         }
       }
       
-      // Deduplicate tasks and filter user tasks
+      // 3. Also fetch tasks assigned to the user (additional)
+      try {
+        const assignedTasksQuery = query(
+          collection(db, 'tasks'),
+          where('assignedTo', '==', user.uid)
+        );
+        
+        const assignedTasksSnap = await getDocs(assignedTasksQuery);
+        const assignedTasks = assignedTasksSnap.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        
+        console.log(`📋 Dashboard: Tasks assigned to user: ${assignedTasks.length}`);
+        allTasks.push(...assignedTasks);
+      } catch (error) {
+        console.error('❌ Dashboard: Error fetching assigned tasks:', error);
+      }
+      
+      // Deduplicate tasks
       const uniqueTasks = allTasks.filter((task, index, self) => 
         index === self.findIndex(t => t.id === task.id)
       );
       
-      // Count tasks that are either assigned to the user OR created by the user
-      const userTasks = uniqueTasks.filter(task => 
-        (task as any).assignedTo === user.uid || (task as any).createdBy === user.uid
-      );
-      console.log('📋 Dashboard: Total user tasks after update:', userTasks.length, '(deduplicated)');
+      console.log('📋 Dashboard: Total unique tasks found:', uniqueTasks.length);
+      console.log('📋 Dashboard: Task details:', uniqueTasks.map(task => ({
+        id: task.id,
+        title: task.title,
+        status: task.status,
+        taskType: task.taskType,
+        createdBy: task.createdBy,
+        assignedTo: task.assignedTo,
+        teamId: task.teamId
+      })));
       
       setAllTasks(uniqueTasks);
       
-      // Update stats with error handling
+      // Update stats
       try {
-        const completedTasks = userTasks.filter(task => (task as any).status === 'COMPLETED').length;
-        const pendingTasks = userTasks.filter(task => (task as any).status !== 'COMPLETED').length;
+        const totalTasks = uniqueTasks.length;
+        const completedTasks = uniqueTasks.filter(task => task.status === 'COMPLETED').length;
+        const pendingTasks = totalTasks - completedTasks;
         
         setStats({
-          totalTasks: userTasks.length,
+          totalTasks,
           completedTasks,
-          pendingTasks,
-
+          pendingTasks
         });
         
-        console.log('📊 Dashboard: Stats updated:', { totalTasks: userTasks.length, completedTasks, pendingTasks });
+        console.log('📊 Dashboard: Stats updated:', { totalTasks, completedTasks, pendingTasks });
       } catch (error) {
         console.error('❌ Dashboard: Error updating stats:', error);
         setStats({ totalTasks: 0, completedTasks: 0, pendingTasks: 0 });
@@ -406,10 +432,10 @@ const Dashboard: React.FC = () => {
       
     } catch (error) {
       console.error('❌ Dashboard: Error in fetchUserTasks:', error);
-      setAllTasks([]); // Clear tasks on error
-             setStats({ totalTasks: 0, completedTasks: 0, pendingTasks: 0 });
+      setAllTasks([]);
+      setStats({ totalTasks: 0, completedTasks: 0, pendingTasks: 0 });
     }
-  }, [user?.uid, teams.length]); // Only depend on teams count, not content
+  }, [user?.uid, teams]); // Depend on teams array, not just length
 
   useEffect(() => {
     if (!user) return;
@@ -434,6 +460,114 @@ const Dashboard: React.FC = () => {
       isMounted = false;
     };
   }, [user, fetchDashboardData, fetchUserTasks]);
+
+  // Add real-time task listener (similar to Tasks component)
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    console.log('📋 Dashboard: Setting up real-time task listener');
+    
+    const allTasks: any[] = [];
+    const unsubscribers: (() => void)[] = [];
+
+    // 1. Listen to individual tasks
+    const individualTasksQuery = query(
+      collection(db, 'tasks'),
+      where('createdBy', '==', user.uid),
+      where('taskType', '==', 'individual')
+    );
+
+    const individualUnsub = onSnapshot(individualTasksQuery, (snapshot) => {
+      const individualTasks = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      
+      console.log('📋 Dashboard: Real-time individual tasks update:', individualTasks.length);
+      
+      // Update allTasks with individual tasks
+      const updatedTasks = allTasks.filter(task => task.taskType !== 'individual');
+      updatedTasks.push(...individualTasks);
+      
+      // Deduplicate and update state
+      const uniqueTasks = updatedTasks.filter((task, index, self) => 
+        index === self.findIndex(t => t.id === task.id)
+      );
+      
+      setAllTasks(uniqueTasks);
+    });
+
+    unsubscribers.push(individualUnsub);
+
+    // 2. Listen to team tasks if user has teams
+    if (teams.length > 0) {
+      const teamIds = teams.map(team => typeof team === 'string' ? team : team.id);
+      
+      if (teamIds.length > 0) {
+        const teamTasksQuery = query(
+          collection(db, 'tasks'),
+          where('teamId', 'in', teamIds),
+          where('taskType', '==', 'team')
+        );
+
+        const teamUnsub = onSnapshot(teamTasksQuery, (snapshot) => {
+          const teamTasks = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
+          
+          console.log('📋 Dashboard: Real-time team tasks update:', teamTasks.length);
+          
+          // Update allTasks with team tasks
+          const updatedTasks = allTasks.filter(task => task.taskType !== 'team');
+          updatedTasks.push(...teamTasks);
+          
+          // Deduplicate and update state
+          const uniqueTasks = updatedTasks.filter((task, index, self) => 
+            index === self.findIndex(t => t.id === task.id)
+          );
+          
+          setAllTasks(uniqueTasks);
+        });
+
+        unsubscribers.push(teamUnsub);
+      }
+    }
+
+    // 3. Listen to assigned tasks
+    const assignedTasksQuery = query(
+      collection(db, 'tasks'),
+      where('assignedTo', '==', user.uid)
+    );
+
+    const assignedUnsub = onSnapshot(assignedTasksQuery, (snapshot) => {
+      const assignedTasks = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      
+      console.log('📋 Dashboard: Real-time assigned tasks update:', assignedTasks.length);
+      
+      // Update allTasks with assigned tasks
+      const updatedTasks = allTasks.filter(task => task.assignedTo !== user.uid);
+      updatedTasks.push(...assignedTasks);
+      
+      // Deduplicate and update state
+      const uniqueTasks = updatedTasks.filter((task, index, self) => 
+        index === self.findIndex(t => t.id === task.id)
+      );
+      
+      setAllTasks(uniqueTasks);
+    });
+
+    unsubscribers.push(assignedUnsub);
+
+    // Cleanup function
+    return () => {
+      console.log('📋 Dashboard: Cleaning up real-time listeners');
+      unsubscribers.forEach(unsub => unsub());
+    };
+  }, [user?.uid, teams]);
 
   // Add a refresh function for manual updates
   const refreshDashboard = async () => {
@@ -490,22 +624,19 @@ const Dashboard: React.FC = () => {
     console.log('🔄 Dashboard: User tasks updated:', allTasks.length, 'tasks');
     
     if (allTasks.length > 0) {
-      // Filter tasks that belong to the current user
-      const userTasks = allTasks.filter(task => 
-        task.assignedTo === user?.uid || task.createdBy === user?.uid
-      );
-      
       // Debug: Log all task details
-      console.log('📋 Dashboard: All user tasks:', userTasks.map(task => ({
+      console.log('📋 Dashboard: All tasks found:', allTasks.map(task => ({
         id: task.id,
         title: task.title,
         status: task.status,
+        taskType: task.taskType,
         assignedTo: task.assignedTo,
-        createdBy: task.createdBy
+        createdBy: task.createdBy,
+        teamId: task.teamId
       })));
       
       // Sort by creation date and take recent 10
-      const sortedTasks = userTasks.sort((a, b) => {
+      const sortedTasks = allTasks.sort((a, b) => {
         if (!a.createdAt || !b.createdAt) return 0;
         // Handle both Firestore Timestamp and regular Date objects
         const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt);
@@ -514,12 +645,12 @@ const Dashboard: React.FC = () => {
       });
       setRecentTasks(sortedTasks.slice(0, 10));
 
-      // Calculate stats for user's tasks only
-      const totalTasks = userTasks.length;
-      const completedTasks = userTasks.filter(task => task.status === 'COMPLETED').length;
+      // Calculate stats for all tasks (since we already filtered in fetchUserTasks)
+      const totalTasks = allTasks.length;
+      const completedTasks = allTasks.filter(task => task.status === 'COMPLETED').length;
       const pendingTasks = totalTasks - completedTasks;
       
-      console.log('📊 Dashboard: Updating user stats:', { totalTasks, completedTasks, pendingTasks });
+      console.log('📊 Dashboard: Updating stats:', { totalTasks, completedTasks, pendingTasks });
       
       setStats(prev => ({
         ...prev,
@@ -528,15 +659,16 @@ const Dashboard: React.FC = () => {
         pendingTasks
       }));
     } else {
-      console.log('📊 Dashboard: No user tasks found, resetting stats');
+      console.log('📊 Dashboard: No tasks found, resetting stats');
       setStats(prev => ({
         ...prev,
         totalTasks: 0,
         completedTasks: 0,
         pendingTasks: 0
       }));
+      setRecentTasks([]);
     }
-  }, [allTasks, user?.uid]);
+  }, [allTasks]);
 
   // Debug function to reset tasks state
   const resetTasksState = () => {
@@ -590,6 +722,19 @@ const Dashboard: React.FC = () => {
               <p className="text-blue-100 text-lg">Here's what's happening with your personal tasks today.</p>
             </div>
             <div className="flex items-center space-x-4">
+              {/* Debug Button - Only in development */}
+              {!isProductionMode && (
+                <div className="block">
+                  <button
+                    onClick={() => setShowDebugger(true)}
+                    className="bg-orange-500 text-white px-4 py-2 rounded-lg font-bold text-lg border-4 border-orange-300 shadow-xl"
+                    style={{ minWidth: '120px', minHeight: '60px' }}
+                  >
+                    🔍 DEBUG
+                  </button>
+                </div>
+              )}
+              
               {/* Test Button - Always visible */}
               <div className="block">
                 <button
@@ -859,11 +1004,8 @@ const Dashboard: React.FC = () => {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
                         </svg>
                       </div>
-                      <div className="flex items-center space-x-1">
-                        <span className="text-sm text-gray-500 dark:text-gray-400">{team.members.length}</span>
-                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                        </svg>
+                      <div className="flex items-center">
+                        <span className="text-sm text-gray-500 dark:text-gray-400">{team.members.length} members</span>
                       </div>
                     </div>
                     
@@ -1169,6 +1311,11 @@ const Dashboard: React.FC = () => {
         onComplete={() => console.log('Phone number collection completed')}
         showSkip={true}
       />
+
+      {/* Task Count Debugger Modal */}
+      {showDebugger && (
+        <TaskCountDebugger onClose={() => setShowDebugger(false)} />
+      )}
 
     </div>
   );

@@ -44,7 +44,8 @@ const AddTaskForm: React.FC<AddTaskFormProps> = ({ taskToEdit, onClose, userTeam
     const newErrors: { [key: string]: string } = {};
     if (!title) newErrors.title = 'Task Title is required';
     if (!category) newErrors.category = 'Category is required';
-    if (!dueDate) newErrors.dueDate = 'Due Date is required';
+    // Due date is optional for individual tasks, required for team tasks
+    if (taskType === 'team' && !dueDate) newErrors.dueDate = 'Due Date is required for team tasks';
     if (!status) newErrors.status = 'Status is required';
     if (taskType === 'team' && !selectedTeamId) newErrors.teamId = 'Team selection is required for team tasks';
     setErrors(newErrors);
@@ -61,9 +62,9 @@ const AddTaskForm: React.FC<AddTaskFormProps> = ({ taskToEdit, onClose, userTeam
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         
-        // Check file size (max 10MB)
-        if (file.size > 10 * 1024 * 1024) {
-          alert(`File ${file.name} is too large. Maximum size is 10MB.`);
+        // Check file size (max 1MB to prevent Firestore payload issues)
+        if (file.size > 1 * 1024 * 1024) {
+          alert(`File ${file.name} is too large. Maximum size is 1MB. Please use smaller files or compress them.`);
           continue;
         }
         
@@ -79,31 +80,24 @@ const AddTaskForm: React.FC<AddTaskFormProps> = ({ taskToEdit, onClose, userTeam
           continue;
         }
         
-        // TEMPORARY: Convert file to base64 for testing without Firebase Storage
-        const reader = new FileReader();
-        reader.onload = () => {
-          const base64String = reader.result as string;
-          
-          const newAttachment = {
-            name: file.name,
-            url: base64String, // Store base64 instead of Firebase URL
-            type: file.type,
-            size: file.size,
-            uploadedAt: new Date().toISOString()
-          };
-          
-          newAttachments.push(newAttachment);
-          setAttachments([...newAttachments]);
-          
-          // Add to activity log
-          const newLog = {
-            message: `You uploaded file: ${file.name}`,
-            timestamp: new Date().toLocaleString(),
-          };
-          setActivityLog(prev => [...prev, newLog]);
+        // Store file metadata only (not the actual file content)
+        const newAttachment = {
+          name: file.name,
+          url: '', // Empty URL - files will be handled separately
+          type: file.type,
+          size: file.size,
+          uploadedAt: new Date().toISOString()
         };
         
-        reader.readAsDataURL(file);
+        newAttachments.push(newAttachment);
+        setAttachments([...newAttachments]);
+        
+        // Add to activity log
+        const newLog = {
+          message: `You uploaded file: ${file.name}`,
+          timestamp: new Date().toLocaleString(),
+        };
+        setActivityLog(prev => [...prev, newLog]);
       }
       
       setAttachments(newAttachments);
@@ -169,7 +163,7 @@ const AddTaskForm: React.FC<AddTaskFormProps> = ({ taskToEdit, onClose, userTeam
       title,
       description,
       category,
-      dueDate,
+      dueDate: dueDate || undefined,
       status,
       priority,
       taskType,
@@ -192,20 +186,50 @@ const AddTaskForm: React.FC<AddTaskFormProps> = ({ taskToEdit, onClose, userTeam
     }
 
     try {
+      // Check data size before saving
+      const dataSize = JSON.stringify(taskData).length;
+      console.log('📊 Task data size:', dataSize, 'bytes');
+      
+      if (dataSize > 1000000) { // 1MB limit
+        alert('Task data is too large. Please reduce file attachments or description length.');
+        return;
+      }
+      
       if (taskToEdit) {
+        console.log('🔄 Updating task:', taskToEdit.id);
         await updateDoc(doc(db, 'tasks', taskToEdit.id!), taskData);
+        console.log('✅ Task updated successfully');
       } else {
         newActivityLog.push({
           message: 'You created this task',
           timestamp: new Date().toLocaleString(),
         });
         taskData.activityLog = newActivityLog;
-        await addDoc(collection(db, 'tasks'), taskData);
+        console.log('🔄 Creating new task');
+        const docRef = await addDoc(collection(db, 'tasks'), taskData);
+        console.log('✅ Task created successfully with ID:', docRef.id);
       }
       onClose();
     } catch (error) {
-      console.error('Error saving task:', error);
-      alert('Error saving task. Please try again.');
+      console.error('❌ Error saving task:', error);
+      
+      // Provide more specific error messages
+      let errorMessage = 'Error saving task. Please try again.';
+      if (error instanceof Error) {
+        if (error.message.includes('permission-denied')) {
+          errorMessage = 'Permission denied. Please check your account permissions.';
+        } else if (error.message.includes('network')) {
+          errorMessage = 'Network error. Please check your internet connection.';
+        } else if (error.message.includes('quota') || error.message.includes('payload size')) {
+          errorMessage = 'Task data is too large. Please reduce file attachments or description length.';
+        } else if (error.message.includes('Request payload size exceeds')) {
+          errorMessage = 'Task data is too large. Please reduce file attachments or description length.';
+        } else {
+          errorMessage = `Error: ${error.message}`;
+        }
+      }
+      
+      alert(errorMessage);
     }
   };
 

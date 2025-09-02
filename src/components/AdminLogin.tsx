@@ -11,10 +11,18 @@ const AdminLogin: React.FC = () => {
 
   // Initialize default admin accounts on component mount
   useEffect(() => {
-    MultiAdminService.initializeDefaultAdmins().catch((error) => {
-      console.error('Failed to initialize default admin accounts on mount:', error);
-      // Don't show error to user here, they can still try to login
-    });
+    const initializeAdmins = async () => {
+      try {
+        console.log('🚀 AdminLogin: Initializing admin accounts...');
+        await MultiAdminService.ensureInitialized();
+        console.log('✅ AdminLogin: Admin accounts ready');
+      } catch (error) {
+        console.error('❌ AdminLogin: Failed to initialize admin accounts:', error);
+        // Don't show error to user here, they can still try to login
+      }
+    };
+    
+    initializeAdmins();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -57,16 +65,7 @@ const AdminLogin: React.FC = () => {
             </p>
           </div>
           
-          {/* Secure Admin Access Info */}
-          <div className="mt-4 p-4 bg-blue-900/30 border border-blue-500/30 rounded-lg">
-            <h3 className="text-blue-200 text-sm font-semibold mb-2">🔒 Secure Admin Access</h3>
-            <div className="space-y-2 text-xs text-blue-200">
-              <p>• Contact your system administrator for credentials</p>
-              <p>• Do not share admin credentials</p>
-              <p>• Use strong, unique passwords</p>
-              <p>• Enable 2FA if available</p>
-            </div>
-          </div>
+
         </div>
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
@@ -133,16 +132,19 @@ const AdminLogin: React.FC = () => {
           </div>
         </form>
 
-        {/* Security Notice */}
-        <div className="text-center p-4 bg-yellow-900/20 border border-yellow-500/30 rounded-lg">
+        {/* <div className="text-center p-4 bg-yellow-900/20 border border-yellow-500/30 rounded-lg">
           <p className="text-yellow-200 text-sm font-medium">
-            🔒 Security Notice
+            🔑 Default Admin Credentials:
           </p>
-          <p className="text-yellow-200 text-xs mt-1">
-            Admin credentials are managed securely through environment configuration.
-            Contact your system administrator for access.
-          </p>
-        </div>
+          <div className="mt-2 space-y-1">
+            <p className="text-yellow-200 text-xs">
+              Email: <code className="bg-yellow-900/50 px-2 py-1 rounded text-yellow-100">mrajasekhar9676@gmail.com</code>
+            </p>
+            <p className="text-yellow-200 text-xs">
+              Password: <code className="bg-yellow-900/50 px-2 py-1 rounded text-yellow-100">admin123</code>
+            </p>
+          </div>
+        </div> */}
       </div>
     </div>
   );

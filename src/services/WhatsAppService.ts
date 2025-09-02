@@ -110,6 +110,10 @@ class WhatsAppService {
       throw new Error('Task ID is required to generate reminder message');
     }
     
+    if (!task.dueDate) {
+      throw new Error('Task due date is required for reminder message');
+    }
+    
     const dueDate = new Date(task.dueDate);
     const formattedDate = dueDate.toLocaleDateString('en-US', {
       weekday: 'long',
@@ -136,7 +140,7 @@ class WhatsAppService {
     return {
       taskId: task.id,
       taskTitle: task.title,
-      dueDate: task.dueDate,
+      dueDate: task.dueDate!,
       priority: task.priority,
       phoneNumber,
       message,
@@ -152,6 +156,11 @@ class WhatsAppService {
     }
 
     try {
+      if (!task.dueDate) {
+        console.error('❌ WhatsApp Service: Task due date is required for reminder');
+        return false;
+      }
+      
       // Format dates for template
       const scheduledDate = new Date(task.dueDate).toLocaleDateString('en-GB', {
         day: '2-digit',
@@ -213,6 +222,11 @@ class WhatsAppService {
 
   // Send reminder for overdue tasks
   async sendOverdueReminder(task: Task, phoneNumber: string): Promise<boolean> {
+    if (!task.dueDate) {
+      console.error('❌ WhatsApp Service: Task due date is required for overdue reminder');
+      return false;
+    }
+    
     const overdueMessage = `🚨 *URGENT: Overdue Task*\n\n` +
       `*${task.title}*\n\n` +
       `This task was due on ${new Date(task.dueDate).toLocaleDateString()} and is now overdue!\n\n` +

@@ -8,8 +8,8 @@ import AddTaskForm from '../components/AddTaskForm';
 
 const Tasks: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [activeTab, setActiveTab] = useState<'individual' | 'team'>('individual');
-  const [currentView, setCurrentView] = useState<'list' | 'grid' | 'calendar'>('list');
+  const [activeTab, setActiveTab] = useState<'individual' | 'team' | 'assigned'>('individual');
+  const [currentView, setCurrentView] = useState<'list' | 'grid'>('list');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [userTeams, setUserTeams] = useState<any[]>([]);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
@@ -65,31 +65,70 @@ const Tasks: React.FC = () => {
   useEffect(() => {
     if (!user) return;
 
-    // Fetch tasks based on active tab
-    let tasksQuery;
-    
+    let unsubscribe: (() => void) | undefined;
+    let isMounted = true;
+
     if (activeTab === 'individual') {
-      tasksQuery = query(
+      // For individual tab, we need to fetch tasks created by user AND tasks assigned to user
+      // Since Firestore doesn't support OR queries, we'll make two separate queries
+      const createdByUserQuery = query(
         collection(db, 'tasks'),
         where('createdBy', '==', user.uid),
         where('taskType', '==', 'individual')
       );
-    } else {
-      // Team tasks - get tasks from user's teams
-      const teamIds = userTeams.map(team => team.id);
-      if (teamIds.length > 0) {
-        tasksQuery = query(
-          collection(db, 'tasks'),
-          where('teamId', 'in', teamIds),
-          where('taskType', '==', 'team')
-        );
-      }
-    }
-
-    if (tasksQuery) {
-      let isMounted = true;
       
-      const unsubscribe = onSnapshot(tasksQuery, (snapshot) => {
+      const assignedToUserQuery = query(
+        collection(db, 'tasks'),
+        where('assignedTo', '==', user.uid)
+      );
+      
+      // Listen to both queries and combine results
+      let createdTasks: Task[] = [];
+      let assignedTasks: Task[] = [];
+      
+      const unsubscribeCreated = onSnapshot(createdByUserQuery, (snapshot) => {
+        if (!isMounted) return;
+        createdTasks = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Task[];
+        
+        // Combine and deduplicate tasks
+        const allTasks = [...createdTasks, ...assignedTasks];
+        const uniqueTasks = allTasks.filter((task, index, self) => 
+          index === self.findIndex(t => t.id === task.id)
+        );
+        setTasks(uniqueTasks);
+      });
+      
+      const unsubscribeAssigned = onSnapshot(assignedToUserQuery, (snapshot) => {
+        if (!isMounted) return;
+        assignedTasks = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Task[];
+        
+        // Combine and deduplicate tasks
+        const allTasks = [...createdTasks, ...assignedTasks];
+        const uniqueTasks = allTasks.filter((task, index, self) => 
+          index === self.findIndex(t => t.id === task.id)
+        );
+        setTasks(uniqueTasks);
+      });
+      
+      unsubscribe = () => {
+        unsubscribeCreated();
+        unsubscribeAssigned();
+      };
+      
+    } else if (activeTab === 'assigned') {
+      // For assigned tab, fetch tasks assigned to the current user
+      const tasksQuery = query(
+        collection(db, 'tasks'),
+        where('assignedTo', '==', user.uid)
+      );
+      
+      unsubscribe = onSnapshot(tasksQuery, (snapshot) => {
         if (!isMounted) return;
         
         try {
@@ -104,12 +143,42 @@ const Tasks: React.FC = () => {
       }, (error) => {
         console.error('Error listening to tasks:', error);
       });
-
-      return () => {
-        isMounted = false;
-        unsubscribe();
-      };
+      
+    } else {
+      // Team tasks - get tasks from user's teams
+      const teamIds = userTeams.map(team => team.id);
+      if (teamIds.length > 0) {
+        const tasksQuery = query(
+          collection(db, 'tasks'),
+          where('teamId', 'in', teamIds),
+          where('taskType', '==', 'team')
+        );
+        
+        unsubscribe = onSnapshot(tasksQuery, (snapshot) => {
+          if (!isMounted) return;
+          
+          try {
+            const tasksData = snapshot.docs.map(doc => ({
+              id: doc.id,
+              ...doc.data()
+            })) as Task[];
+            setTasks(tasksData);
+          } catch (error) {
+            console.error('Error listening to tasks:', error);
+          }
+        }, (error) => {
+          console.error('Error listening to tasks:', error);
+        });
+      }
     }
+
+    // Return cleanup function
+    return () => {
+      isMounted = false;
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, [user, activeTab, userTeams]);
 
   const handleUpdateTaskStatus = async (taskId: string, newStatus: Task['status']) => {
@@ -148,13 +217,8 @@ const Tasks: React.FC = () => {
     }
   };
 
-  const filteredTasks = tasks.filter(task => {
-    if (activeTab === 'individual') {
-      return task.taskType === 'individual';
-    } else {
-      return task.taskType === 'team';
-    }
-  });
+  // Tasks are now filtered at the query level, so we can use them directly
+  const filteredTasks = tasks;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -164,9 +228,9 @@ const Tasks: React.FC = () => {
           <div className="flex justify-between items-center py-6">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">Tasks</h1>
-              <p className="mt-1 text-sm text-gray-500">
-                Manage your {activeTab === 'individual' ? 'personal' : 'team'} tasks
-              </p>
+                             <p className="mt-1 text-sm text-gray-500">
+                 Manage your {activeTab === 'individual' ? 'personal and assigned' : activeTab === 'assigned' ? 'assigned' : 'team'} tasks
+               </p>
             </div>
             <button
               onClick={() => setShowCreateModal(true)}
@@ -211,6 +275,19 @@ const Tasks: React.FC = () => {
               </svg>
               Team Tasks
             </button>
+            <button
+              onClick={() => setActiveTab('assigned')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                activeTab === 'assigned'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <svg className="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-2a3 3 0 00-5.356-1.857M15 21H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 21H2v-2a3 3 0 015.356-1.857M7 21v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+              Assigned Tasks
+            </button>
           </div>
         </div>
       </div>
@@ -234,9 +311,9 @@ const Tasks: React.FC = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
               </svg>
               <h3 className="mt-2 text-sm font-medium text-gray-900">No tasks</h3>
-              <p className="mt-1 text-sm text-gray-500">
-                Get started by creating a new {activeTab === 'individual' ? 'personal' : 'team'} task.
-              </p>
+                             <p className="mt-1 text-sm text-gray-500">
+                 Get started by creating a new {activeTab === 'individual' ? 'personal or assigned' : activeTab === 'assigned' ? 'assigned' : 'team'} task.
+               </p>
               <div className="mt-6">
                 <button
                   onClick={() => setShowCreateModal(true)}
@@ -254,8 +331,27 @@ const Tasks: React.FC = () => {
               {filteredTasks.map((task) => (
                 <div key={task.id} className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
                   <div className="p-6">
-                    <div className="flex items-start justify-between">
-                      <h3 className="text-lg font-medium text-gray-900 mb-2">{task.title}</h3>
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <h3 className="text-lg font-medium text-gray-900">{task.title}</h3>
+                        <div className="flex items-center space-x-2 mt-1">
+                                                     <span className="text-sm text-gray-500">
+                             {task.teamId ? 'Team Task' : 'Individual Task'}
+                           </span>
+                          {activeTab === 'individual' && (
+                            <>
+                              <span className="text-gray-400">•</span>
+                              <span className={`text-xs px-2 py-1 rounded-full ${
+                                task.assignedTo === user?.uid 
+                                  ? 'bg-blue-100 text-blue-800' 
+                                  : 'bg-green-100 text-green-800'
+                              }`}>
+                                {task.assignedTo === user?.uid ? 'Assigned to you' : 'Created by you'}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
                       <div className="flex items-center space-x-2">
                         <button
                           onClick={() => setViewingTask(task)}

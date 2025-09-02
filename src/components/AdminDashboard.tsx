@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { MultiAdminService, AdminUser } from '../services/multiAdminService';
 import { adminWhatsAppService } from '../services/adminWhatsAppService';
 import { db } from '../config';
-import { collection, getDocs, doc, getDoc, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, updateDoc, addDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import CreateUserForm from './CreateUserForm';
 import AdminManagement from './AdminManagement';
+import EditUserModal from './EditUserModal';
 
 // Admin interfaces
 interface AdminStats {
@@ -126,6 +127,10 @@ const AdminDashboard: React.FC = () => {
   
   // Admin management modal state
   const [showAdminManagement, setShowAdminManagement] = useState(false);
+  
+  // Edit user modal state
+  const [showEditUserModal, setShowEditUserModal] = useState(false);
+  const [selectedUserForEdit, setSelectedUserForEdit] = useState<UserData | null>(null);
 
   useEffect(() => {
     // Check admin status using the new service
@@ -146,7 +151,57 @@ const AdminDashboard: React.FC = () => {
     
     // Load data when admin is authenticated
     loadAdminData();
+    
+    // Set up real-time listeners for tasks
+    const unsubscribe = setupRealtimeListeners();
+    
+    // Cleanup function to unsubscribe from listeners
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, [navigate]);
+
+  // Set up real-time listeners for tasks
+  const setupRealtimeListeners = () => {
+    try {
+      // Listen to tasks collection for real-time updates
+      const tasksQuery = collection(db, 'tasks');
+      const unsubscribe = onSnapshot(tasksQuery, (snapshot) => {
+        console.log('🔄 Admin: Real-time task update received');
+        const tasksData: TaskData[] = [];
+        
+        snapshot.docs.forEach((taskDoc) => {
+          const taskData = taskDoc.data();
+          tasksData.push({
+            id: taskDoc.id,
+            title: taskData.title || 'Untitled Task',
+            description: taskData.description || 'No description',
+            teamId: taskData.teamId || '',
+            teamName: taskData.teamName || 'Unknown Team',
+            assignedTo: taskData.assignedTo || '',
+            assignedToName: taskData.assignedToName || 'Unassigned',
+            status: taskData.status || 'todo',
+            priority: taskData.priority || 'medium',
+            dueDate: taskData.dueDate,
+            createdAt: taskData.createdAt
+          });
+        });
+        
+        setTasks(tasksData);
+        console.log(`✅ Admin: Updated ${tasksData.length} tasks in real-time`);
+      }, (error) => {
+        console.error('❌ Admin: Error in real-time task listener:', error);
+      });
+      
+      // Return cleanup function
+      return unsubscribe;
+    } catch (error) {
+      console.error('❌ Admin: Error setting up real-time listeners:', error);
+      return () => {};
+    }
+  };
 
   const loadAdminData = async () => {
     try {
@@ -597,12 +652,33 @@ const AdminDashboard: React.FC = () => {
           members: []
         });
         
+        // Immediately update local state with the new team
+        const newTeamData: TeamData = {
+          id: docRef.id,
+          name: createTeamForm.name,
+          description: createTeamForm.description,
+          memberCount: createTeamForm.members.length,
+          totalTasks: 0,
+          completedTasks: 0,
+          createdAt: new Date()
+        };
+        
+        // Update teams state immediately
+        setTeams(prev => [...prev, newTeamData]);
+        setAvailableTeams(prev => [...prev, { id: docRef.id, name: createTeamForm.name }]);
+        
+        // Update stats immediately
+        setStats(prev => ({
+          ...prev,
+          totalTeams: prev.totalTeams + 1
+        }));
+        
         // Show success message
         setSuccessMessage('Team created successfully! 🎉');
         setShowSuccessModal(true);
         
-        // Refresh data to show new team
-        loadAdminData();
+        // Switch back to teams view to show the new team
+        setViewMode('teams');
         
       } catch (firestoreError: any) {
         console.error('❌ Admin: Failed to create team in Firestore:', firestoreError);
@@ -639,6 +715,19 @@ const AdminDashboard: React.FC = () => {
     } catch (error) {
       console.error('Error creating team:', error);
     }
+  };
+
+  const handleEditUser = (user: UserData) => {
+    setSelectedUserForEdit(user);
+    setShowEditUserModal(true);
+  };
+
+  const handleUserUpdated = () => {
+    loadAdminData(); // Refresh the data
+  };
+
+  const handleUserDeleted = () => {
+    loadAdminData(); // Refresh the data
   };
 
   const handleCreateTask = async () => {
@@ -754,14 +843,57 @@ const AdminDashboard: React.FC = () => {
           documentName: ''
         });
         
+        // Immediately update local state with the new task
+        const newTaskData: TaskData = {
+          id: docRef.id,
+          title: newTask.title,
+          description: newTask.description,
+          teamId: newTask.teamId || '',
+          teamName: newTask.teamName,
+          assignedTo: newTask.assignedTo || '',
+          assignedToName: newTask.assignedToName,
+          status: newTask.status,
+          priority: newTask.priority,
+          dueDate: newTask.dueDate,
+          createdAt: newTask.createdAt
+        };
+        
+        // Update tasks state immediately
+        setTasks(prev => [...prev, newTaskData]);
+        
+        // Update stats immediately
+        setStats(prev => ({
+          ...prev,
+          totalTasks: prev.totalTasks + 1,
+          pendingTasks: prev.pendingTasks + 1
+        }));
+        
+        // Update user task counts if assigned to a user
+        if (newTask.assignedTo && typeof newTask.assignedTo === 'string') {
+          setUsers(prev => prev.map(u => 
+            u.id === newTask.assignedTo 
+              ? { ...u, totalTasks: u.totalTasks + 1, pendingTasks: u.pendingTasks + 1 }
+              : u
+          ));
+        }
+        
+        // Update team task counts if assigned to a team
+        if (newTask.teamId && typeof newTask.teamId === 'string') {
+          setTeams(prev => prev.map(t => 
+            t.id === newTask.teamId 
+              ? { ...t, totalTasks: t.totalTasks + 1 }
+              : t
+          ));
+        }
+        
         // Show success message
         const taskType = viewMode === 'create-individual-task' ? 'Individual Task' : 'Group Task';
         const notificationText = newTask.assignedTo ? ' WhatsApp notification sent.' : '';
         setSuccessMessage(`${taskType} created successfully!${notificationText} 📱`);
         setShowSuccessModal(true);
         
-        // Refresh data to show new task
-        loadAdminData();
+        // Switch back to tasks view to show the new task
+        setViewMode('tasks');
         
       } catch (firestoreError: any) {
         console.error('❌ Admin: Failed to create task in Firestore:', firestoreError);
@@ -1282,41 +1414,65 @@ const AdminDashboard: React.FC = () => {
                 {users.map((user) => (
                   <div 
                     key={user.id} 
-                    className="bg-gray-50 rounded-lg p-6 hover:bg-blue-50 transition-colors cursor-pointer border-2 border-transparent hover:border-blue-300"
-                    onClick={() => {
-                      setSelectedUser(user);
-                      setViewMode('tasks');
-                    }}
+                    className="bg-gray-50 rounded-lg p-6 hover:bg-blue-50 transition-colors border-2 border-transparent hover:border-blue-300 relative"
                   >
                     <div className="flex items-center justify-between mb-4">
                       <div className="h-12 w-12 rounded-full bg-gradient-to-r from-blue-500 to-navy-600 flex items-center justify-center text-white font-semibold text-lg">
                         {user.displayName.charAt(0).toUpperCase()}
                       </div>
-                      <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
-                        {user.teams.length} teams
-                      </span>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                          {user.teams.length} teams
+                        </span>
+                        {/* Super Admin Edit/Delete Buttons */}
+                        {currentAdmin?.role === 'super_admin' && (
+                          <div className="flex space-x-1">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEditUser(user);
+                              }}
+                              className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded transition-colors"
+                              title="Edit User"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">{user.displayName}</h3>
-                    <p className="text-sm text-gray-600 mb-2">{user.email}</p>
-                    <p className="text-sm text-gray-500 mb-4">
-                      📱 {user.phoneNumber || user.phone || 'No phone'}
-                    </p>
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Total Tasks:</span>
-                        <span className="font-medium text-blue-600">{user.totalTasks}</span>
+                    
+                    <div 
+                      className="cursor-pointer"
+                      onClick={() => {
+                        setSelectedUser(user);
+                        setViewMode('tasks');
+                      }}
+                    >
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">{user.displayName}</h3>
+                      <p className="text-sm text-gray-600 mb-2">{user.email}</p>
+                      <p className="text-sm text-gray-500 mb-4">
+                        📱 {user.phoneNumber || user.phone || 'No phone'}
+                      </p>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Total Tasks:</span>
+                          <span className="font-medium text-blue-600">{user.totalTasks}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Completed:</span>
+                          <span className="font-medium text-green-600">{user.completedTasks}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Pending:</span>
+                          <span className="font-medium text-yellow-600">{user.pendingTasks}</span>
+                        </div>
                       </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Completed:</span>
-                        <span className="font-medium text-green-600">{user.completedTasks}</span>
+                      <div className="mt-4 text-xs text-gray-500">
+                        Joined: {user.createdAt?.toDate?.()?.toLocaleDateString() || 'Unknown'}
                       </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Pending:</span>
-                        <span className="font-medium text-yellow-600">{user.pendingTasks}</span>
-                      </div>
-                    </div>
-                    <div className="mt-4 text-xs text-gray-500">
-                      Joined: {user.createdAt?.toDate?.()?.toLocaleDateString() || 'Unknown'}
                     </div>
                   </div>
                 ))}
@@ -1842,6 +1998,16 @@ const AdminDashboard: React.FC = () => {
           <AdminManagement
             isOpen={showAdminManagement}
             onClose={() => setShowAdminManagement(false)}
+          />
+
+          {/* Edit User Modal */}
+          <EditUserModal
+            isOpen={showEditUserModal}
+            onClose={() => setShowEditUserModal(false)}
+            user={selectedUserForEdit}
+            onUserUpdated={handleUserUpdated}
+            onUserDeleted={handleUserDeleted}
+            isSuperAdmin={currentAdmin?.role === 'super_admin' || false}
           />
        </div>
      </div>

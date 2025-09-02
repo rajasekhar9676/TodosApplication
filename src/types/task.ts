@@ -2,7 +2,7 @@ export interface Task {
   id?: string;
   title: string;
   description?: string;
-  dueDate: string;
+  dueDate?: string;
   status: 'TO-DO' | 'IN-PROGRESS' | 'COMPLETED';
   category: string;
   priority: 'low' | 'medium' | 'high';
@@ -26,6 +26,8 @@ export interface Team {
   name: string;
   members: Array<{ uid: string; role: string }>;
 }
+
+
 
 
 

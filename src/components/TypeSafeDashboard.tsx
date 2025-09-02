@@ -19,6 +19,8 @@ interface TaskData {
   teamId: string;
   teamName?: string;
   assignedTo?: string;
+  createdBy?: string;
+  taskType?: string;
   status?: string;
   priority?: string;
   dueDate?: any;
@@ -96,22 +98,42 @@ const TypeSafeDashboard: React.FC = () => {
                 teamId: data.teamId || '',
                 teamName: data.teamName,
                 assignedTo: data.assignedTo,
+                createdBy: data.createdBy,
+                taskType: data.taskType,
                 status: data.status || 'pending',
                 priority: data.priority || 'medium',
                 dueDate: data.dueDate
               };
-            })
-            .filter(task => userTeams.includes(task.teamId));
+            });
           
-          setTasks(allTasks);
+          // Filter tasks for this user (individual tasks, team tasks, and assigned tasks)
+          const userTasks = allTasks.filter(task => {
+            // Individual tasks created by user
+            if (task.taskType === 'individual' && task.createdBy === user.uid) return true;
+            // Team tasks from user's teams
+            if (task.taskType === 'team' && userTeams.includes(task.teamId)) return true;
+            // Tasks assigned to user
+            if (task.assignedTo === user.uid) return true;
+            return false;
+          });
+          
+          setTasks(userTasks);
           
           // Calculate stats
-          const userTasks = allTasks.filter(task => task.assignedTo === user.uid);
           setStats({
             totalTasks: userTasks.length,
-            completedTasks: userTasks.filter(task => task.status === 'completed').length,
-            pendingTasks: userTasks.filter(task => task.status !== 'completed').length,
+            completedTasks: userTasks.filter(task => task.status === 'COMPLETED').length,
+            pendingTasks: userTasks.filter(task => task.status === 'IN-PROGRESS').length,
             teamsCount: teamsData.length
+          });
+          
+          // Debug logging
+          console.log('Dashboard Debug Info:', {
+            totalTasks: userTasks.length,
+            completedTasks: userTasks.filter(task => task.status === 'COMPLETED').length,
+            pendingTasks: userTasks.filter(task => task.status === 'IN-PROGRESS').length,
+            teamsCount: teamsData.length,
+            userTasks: userTasks.map(t => ({ id: t.id, title: t.title, status: t.status, type: t.taskType }))
           });
         }
       } catch (error) {
@@ -425,13 +447,13 @@ const TypeSafeDashboard: React.FC = () => {
                   </p>
                 </div>
                 <div className="flex items-center space-x-3">
-                  <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${
-                    task.status === 'completed' ? (isDarkTheme ? 'bg-green-900 text-green-300' : 'bg-green-100 text-green-800') :
-                    task.status === 'in-progress' ? (isDarkTheme ? 'bg-yellow-900 text-yellow-300' : 'bg-yellow-100 text-yellow-800') :
-                    (isDarkTheme ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-800')
-                  }`}>
-                    {task.status}
-                  </span>
+                                      <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${
+                      task.status === 'COMPLETED' ? (isDarkTheme ? 'bg-green-900 text-green-300' : 'bg-green-100 text-green-800') :
+                      task.status === 'IN-PROGRESS' ? (isDarkTheme ? 'bg-yellow-900 text-yellow-300' : 'bg-yellow-100 text-yellow-800') :
+                      (isDarkTheme ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-800')
+                    }`}>
+                      {task.status}
+                    </span>
                   <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${
                     task.priority === 'high' ? (isDarkTheme ? 'bg-red-900 text-red-300' : 'bg-red-100 text-red-800') :
                     task.priority === 'medium' ? (isDarkTheme ? 'bg-yellow-900 text-yellow-300' : 'bg-yellow-100 text-yellow-800') :
@@ -471,8 +493,8 @@ const TypeSafeDashboard: React.FC = () => {
               <div key={task.id} className={`flex items-center justify-between p-4 rounded-lg transition-colors border-l-4 ${
                 isDarkTheme ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-50 hover:bg-gray-100'
               } ${
-                task.status === 'completed' ? (isDarkTheme ? 'border-green-500' : 'border-green-400') :
-                task.status === 'in-progress' ? (isDarkTheme ? 'border-yellow-500' : 'border-yellow-400') :
+                task.status === 'COMPLETED' ? (isDarkTheme ? 'border-green-500' : 'border-green-400') :
+                task.status === 'IN-PROGRESS' ? (isDarkTheme ? 'border-yellow-500' : 'border-yellow-400') :
                 (isDarkTheme ? 'border-blue-500' : 'border-blue-400')
               }`}>
                 <div className="flex-1">
@@ -488,8 +510,8 @@ const TypeSafeDashboard: React.FC = () => {
                 </div>
                 <div className="flex items-center space-x-3">
                   <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${
-                    task.status === 'completed' ? (isDarkTheme ? 'bg-green-900 text-green-300' : 'bg-green-100 text-green-800') :
-                    task.status === 'in-progress' ? (isDarkTheme ? 'bg-yellow-900 text-yellow-300' : 'bg-yellow-100 text-yellow-800') :
+                    task.status === 'COMPLETED' ? (isDarkTheme ? 'bg-green-900 text-green-300' : 'bg-green-100 text-green-800') :
+                    task.status === 'IN-PROGRESS' ? (isDarkTheme ? 'bg-yellow-900 text-yellow-300' : 'bg-yellow-100 text-yellow-800') :
                     (isDarkTheme ? 'bg-blue-900 text-blue-300' : 'bg-blue-100 text-blue-800')
                   }`}>
                     {task.status}
@@ -517,7 +539,7 @@ const TypeSafeDashboard: React.FC = () => {
       </div>
 
       {/* Floating Action Buttons */}
-      <div className="fixed right-6 bottom-6 flex flex-col space-y-4">
+      {/* <div className="fixed right-6 bottom-6 flex flex-col space-y-4">
         <button className="w-14 h-14 bg-green-500 hover:bg-green-600 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center text-white">
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -533,7 +555,7 @@ const TypeSafeDashboard: React.FC = () => {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
           </svg>
         </button>
-      </div>
+      </div> */}
     </div>
   );
 };

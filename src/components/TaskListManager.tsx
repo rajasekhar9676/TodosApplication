@@ -3,9 +3,9 @@ import { Task } from '../types/task';
 
 interface TaskListManagerProps {
   tasks: Task[];
-  viewType: 'individual' | 'team' | 'all';
-  onViewChange: (view: 'list' | 'grid' | 'calendar') => void;
-  currentView: 'list' | 'grid' | 'calendar';
+  viewType: 'individual' | 'team' | 'assigned' | 'all';
+  onViewChange: (view: 'list' | 'grid') => void;
+  currentView: 'list' | 'grid';
 }
 
 const TaskListManager: React.FC<TaskListManagerProps> = ({ 
@@ -25,6 +25,7 @@ const TaskListManager: React.FC<TaskListManagerProps> = ({
     if (filterCategory !== 'all' && task.category !== filterCategory) return false;
     if (viewType === 'individual' && task.taskType !== 'individual') return false;
     if (viewType === 'team' && task.taskType !== 'team') return false;
+    if (viewType === 'assigned' && !task.assignedTo) return false;
     return true;
   });
 
@@ -34,7 +35,7 @@ const TaskListManager: React.FC<TaskListManagerProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">
-            {viewType.charAt(0).toUpperCase() + viewType.slice(1)} Tasks
+            {viewType === 'assigned' ? 'Assigned' : viewType.charAt(0).toUpperCase() + viewType.slice(1)} Tasks
           </h2>
           <p className="text-gray-600 mt-1">
             {filteredTasks.length} task{filteredTasks.length !== 1 ? 's' : ''} found
@@ -64,16 +65,7 @@ const TaskListManager: React.FC<TaskListManagerProps> = ({
             >
               Grid
             </button>
-            <button
-              onClick={() => onViewChange('calendar')}
-              className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                currentView === 'calendar'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Calendar
-            </button>
+
           </div>
         </div>
       </div>

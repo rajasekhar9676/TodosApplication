@@ -45,30 +45,12 @@ const CreateUserForm: React.FC<CreateUserFormProps> = ({ isOpen, onClose, onUser
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [skillInput, setSkillInput] = useState('');
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
       [name]: value
-    }));
-  };
-
-  const addSkill = () => {
-    if (skillInput.trim() && !formData.skills.includes(skillInput.trim())) {
-      setFormData(prev => ({
-        ...prev,
-        skills: [...prev.skills, skillInput.trim()]
-      }));
-      setSkillInput('');
-    }
-  };
-
-  const removeSkill = (skillToRemove: string) => {
-    setFormData(prev => ({
-      ...prev,
-      skills: prev.skills.filter(skill => skill !== skillToRemove)
     }));
   };
 
@@ -424,19 +406,11 @@ const CreateUserForm: React.FC<CreateUserFormProps> = ({ isOpen, onClose, onUser
             <div className="flex space-x-2 mb-2">
               <input
                 type="text"
-                value={skillInput}
-                onChange={(e) => setSkillInput(e.target.value)}
+                value={formData.skills.join(', ')} // Display skills as comma-separated string
+                onChange={(e) => setFormData(prev => ({ ...prev, skills: e.target.value.split(',').map(s => s.trim()) }))}
                 className="flex-1 px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-slate-700 dark:text-white"
-                placeholder="Add a skill"
-                onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addSkill())}
+                placeholder="Add skills (comma-separated)"
               />
-              <button
-                type="button"
-                onClick={addSkill}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                Add
-              </button>
             </div>
             {formData.skills.length > 0 && (
               <div className="flex flex-wrap gap-2">
@@ -448,7 +422,7 @@ const CreateUserForm: React.FC<CreateUserFormProps> = ({ isOpen, onClose, onUser
                     {skill}
                     <button
                       type="button"
-                      onClick={() => removeSkill(skill)}
+                      onClick={() => setFormData(prev => ({ ...prev, skills: prev.skills.filter(s => s !== skill) }))}
                       className="ml-2 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200"
                     >
                       ×

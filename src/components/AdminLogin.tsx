@@ -132,6 +132,26 @@ const AdminLogin: React.FC = () => {
           </div>
         </form>
 
+        {/* Temporary Admin Account Creation Button */}
+        <div className="mt-6 text-center">
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                console.log('🔧 Creating admin accounts manually...');
+                await MultiAdminService.createAdminAccountsManually();
+                alert('✅ Admin accounts created successfully! You can now login with:\n\nSuper Admin: anilsharma@educationtoday.co / Anilsharma@1234\nAdmin: accounts@educationtoday.co / Accounts@2025\nModerator: sales@educationtoday.co / Sales@2025');
+              } catch (error) {
+                console.error('❌ Error creating admin accounts:', error);
+                alert('❌ Error creating admin accounts. Check console for details.');
+              }
+            }}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200"
+          >
+            🔧 Create Admin Accounts
+          </button>
+        </div>
+
         {/* <div className="text-center p-4 bg-yellow-900/20 border border-yellow-500/30 rounded-lg">
           <p className="text-yellow-200 text-sm font-medium">
             🔑 Default Admin Credentials:

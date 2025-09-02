@@ -1,402 +1,445 @@
+import { Task } from '../types/task';
 import { db } from '../config';
-import { 
-  collection, 
-  doc, 
-  getDocs, 
-  query, 
-  where, 
-  updateDoc, 
-  addDoc,
-  serverTimestamp,
-  Timestamp 
-} from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, setDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
+import { adminWhatsAppService } from './adminWhatsAppService';
 
-export interface ReminderSettings {
-  enabled: boolean;
-  defaultTime: number; // hours before due date
-  autoReminders: boolean;
-  manualReminders: boolean;
-  whatsappNumber?: string;
-  reminderMessage?: string;
+// Predefined reminder intervals
+export const REMINDER_INTERVALS: ReminderInterval[] = [
+  { id: '4h', name: '4 Hours', hours: 4, description: 'Every 4 hours' },
+  { id: '8h', name: '8 Hours', hours: 8, description: 'Every 8 hours' },
+  { id: '12h', name: '12 Hours', hours: 12, description: 'Every 12 hours' },
+  { id: '1d', name: '1 Day', hours: 24, description: 'Daily' },
+  { id: '2d', name: '2 Days', hours: 48, description: 'Every 2 days' },
+  { id: '3d', name: '3 Days', hours: 72, description: 'Every 3 days' },
+  { id: '1w', name: '1 Week', hours: 168, description: 'Weekly' }
+];
+
+export interface ReminderInterval {
+  id: string;
+  name: string;
+  hours: number;
+  description: string;
 }
 
 export interface TaskReminder {
   id: string;
   taskId: string;
-  taskTitle: string;
-  teamId: string;
-  teamName: string;
   userId: string;
-  userName: string;
-  dueDate: Date;
-  reminderTime: Date;
-  status: 'pending' | 'sent' | 'failed';
-  type: 'manual' | 'automatic';
-  whatsappNumber?: string;
+  phoneNumber: string;
+  reminderType: 'before_due' | 'overdue';
+  intervalHours: number;
+  scheduledTime: Date;
+  sentTime?: Date;
+  status: 'pending' | 'sent' | 'failed' | 'cancelled';
   message: string;
   createdAt: Date;
-  sentAt?: Date;
+  updatedAt: Date;
 }
 
-export interface ReminderResult {
-  success: boolean;
-  message?: string;
-  reminderId?: string;
-  error?: string;
+export interface ReminderSettings {
+  userId: string;
+  enabled: boolean;
+  intervals: number[]; // Array of hours (e.g., [4, 8, 24])
+  beforeDueReminders: boolean;
+  overdueReminders: boolean;
+  reminderTime: string; // Time of day to send reminders (e.g., "09:00")
+  timezone: string;
+  updatedAt: Date;
 }
 
 class WhatsAppReminderService {
-  private apiUrl = 'https://api.whatsapp.com/send'; // You'll need to replace this with your actual WhatsApp Business API
-  
-  // Send manual reminder for a specific task
-  async sendManualReminder(
-    taskId: string, 
-    userId: string, 
-    whatsappNumber: string,
-    customMessage?: string
-  ): Promise<ReminderResult> {
-    try {
-      console.log('📱 WhatsApp: Sending manual reminder for task:', taskId);
-      
-      // Get task details
-      const taskRef = doc(db, 'tasks', taskId);
-      const taskSnap = await getDocs(collection(db, 'tasks'));
-      const task = taskSnap.docs.find(doc => doc.id === taskId)?.data();
-      
-      if (!task) {
-        return {
-          success: false,
-          error: 'Task not found'
-        };
-      }
-      
-      // Get team details
-      const teamRef = doc(db, 'teams', task.teamId);
-      const teamSnap = await getDocs(collection(db, 'teams'));
-      const team = teamSnap.docs.find(doc => doc.id === task.teamId)?.data();
-      
-      // Get user details
-      const userRef = doc(db, 'users', userId);
-      const userSnap = await getDocs(collection(db, 'users'));
-      const user = userSnap.docs.find(doc => doc.id === userId)?.data();
-      
-      if (!team || !user) {
-        return {
-          success: false,
-          error: 'Team or user not found'
-        };
-      }
-      
-      // Create reminder message
-      const defaultMessage = `🔔 Task Reminder\n\n📋 Task: ${task.title}\n👥 Team: ${team.name}\n⏰ Due: ${task.dueDate?.toDate?.() ? task.dueDate.toDate().toLocaleString() : 'No due date'}\n👤 Assigned to: ${user.displayName || user.email}\n\nPlease complete this task on time!`;
-      
-      const message = customMessage || defaultMessage;
-      
-      // Send WhatsApp message (this is a placeholder - you'll need to integrate with actual WhatsApp Business API)
-      const whatsappResult = await this.sendWhatsAppMessage(whatsappNumber, message);
-      
-      if (!whatsappResult.success) {
-        return {
-          success: false,
-          error: `WhatsApp sending failed: ${whatsappResult.error}`
-        };
-      }
-      
-      // Create reminder record
-      const reminderData: Omit<TaskReminder, 'id'> = {
-        taskId,
-        taskTitle: task.title,
-        teamId: task.teamId,
-        teamName: team.name,
-        userId,
-        userName: user.displayName || user.email,
-        dueDate: task.dueDate?.toDate?.() || new Date(),
-        reminderTime: new Date(),
-        status: 'sent',
-        type: 'manual',
-        whatsappNumber,
-        message,
-        createdAt: new Date(),
-        sentAt: new Date()
-      };
-      
-      const reminderRef = await addDoc(collection(db, 'reminders'), reminderData);
-      
-      console.log('✅ WhatsApp: Manual reminder sent successfully');
-      
-      return {
-        success: true,
-        message: 'Reminder sent successfully',
-        reminderId: reminderRef.id
-      };
-      
-    } catch (error: any) {
-      console.error('❌ WhatsApp: Manual reminder failed:', error);
-      return {
-        success: false,
-        error: error.message || 'Failed to send reminder'
-      };
+  private isInitialized: boolean = false;
+  private reminderCheckInterval: NodeJS.Timeout | null = null;
+  private readonly CHECK_INTERVAL = 5 * 60 * 1000; // Check every 5 minutes
+
+
+
+  constructor() {
+    this.initialize();
+  }
+
+  // Initialize the service
+  initialize(): boolean {
+    if (!adminWhatsAppService.getStatus().initialized) {
+      console.error('❌ WhatsApp Reminder Service: Admin WhatsApp service not initialized');
+      return false;
+    }
+
+    this.isInitialized = true;
+    console.log('✅ WhatsApp Reminder Service: Initialized successfully');
+    this.startReminderScheduler();
+    return true;
+  }
+
+  // Start the automatic reminder scheduler
+  private startReminderScheduler(): void {
+    if (this.reminderCheckInterval) {
+      clearInterval(this.reminderCheckInterval);
+    }
+
+    this.reminderCheckInterval = setInterval(() => {
+      this.processPendingReminders();
+    }, this.CHECK_INTERVAL);
+
+    console.log('🔄 WhatsApp Reminder Service: Scheduler started');
+  }
+
+  // Stop the reminder scheduler
+  stopReminderScheduler(): void {
+    if (this.reminderCheckInterval) {
+      clearInterval(this.reminderCheckInterval);
+      this.reminderCheckInterval = null;
+      console.log('⏹️ WhatsApp Reminder Service: Scheduler stopped');
     }
   }
-  
-  // Send automatic reminders for overdue tasks
-  async sendAutomaticReminders(): Promise<ReminderResult[]> {
+
+  // Create reminders for a new task
+  async createTaskReminders(task: Task, userId: string, phoneNumber: string): Promise<{
+    success: boolean;
+    remindersCreated: number;
+    error?: string;
+  }> {
+    if (!this.isInitialized) {
+      return { success: false, remindersCreated: 0, error: 'Service not initialized' };
+    }
+
+    if (!task.dueDate) {
+      console.log('⚠️ WhatsApp Reminder Service: Task has no due date, skipping reminders');
+      return { success: true, remindersCreated: 0 };
+    }
+
     try {
-      console.log('📱 WhatsApp: Starting automatic reminders check');
-      
-      const results: ReminderResult[] = [];
+      // Get user's reminder settings
+      const settings = await this.getUserReminderSettings(userId);
+      if (!settings.enabled) {
+        console.log('⚠️ WhatsApp Reminder Service: User has reminders disabled');
+        return { success: true, remindersCreated: 0 };
+      }
+
+      const dueDate = new Date(task.dueDate);
       const now = new Date();
-      
-      // Get all active tasks with due dates
-      const tasksQuery = query(
-        collection(db, 'tasks'),
-        where('status', 'in', ['todo', 'in-progress']),
-        where('dueDate', '<=', Timestamp.fromDate(now))
-      );
-      
-      const tasksSnap = await getDocs(tasksQuery);
-      
-      for (const taskDoc of tasksSnap.docs) {
-        const task = taskDoc.data();
-        const taskId = taskDoc.id;
-        
-        // Check if reminder already sent recently (within last 4 hours)
-        const fourHoursAgo = new Date(now.getTime() - 4 * 60 * 60 * 1000);
-        
-        const remindersQuery = query(
-          collection(db, 'reminders'),
-          where('taskId', '==', taskId),
-          where('type', '==', 'automatic'),
-          where('sentAt', '>=', Timestamp.fromDate(fourHoursAgo))
-        );
-        
-        const recentReminders = await getDocs(remindersQuery);
-        
-        if (recentReminders.empty) {
-          // Send automatic reminder
-          const result = await this.sendAutomaticReminder(taskId, task);
-          results.push(result);
+      const remindersCreated: TaskReminder[] = [];
+
+      // Create before-due reminders
+      if (settings.beforeDueReminders) {
+        for (const intervalHours of settings.intervals) {
+          const reminderTime = new Date(dueDate.getTime() - (intervalHours * 60 * 60 * 1000));
           
-          // Wait a bit between reminders to avoid rate limiting
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          // Only create reminder if it's in the future
+          if (reminderTime > now) {
+            const reminder: Omit<TaskReminder, 'id'> = {
+              taskId: task.id!,
+              userId,
+              phoneNumber,
+              reminderType: 'before_due',
+              intervalHours,
+              scheduledTime: reminderTime,
+              status: 'pending',
+              message: this.generateReminderMessage(task, 'before_due', intervalHours),
+              createdAt: now,
+              updatedAt: now
+            };
+
+            const reminderRef = await addDoc(collection(db, 'taskReminders'), reminder);
+            remindersCreated.push({ id: reminderRef.id, ...reminder });
+          }
         }
       }
-      
-      console.log(`✅ WhatsApp: Automatic reminders completed. ${results.length} reminders sent.`);
-      return results;
-      
-    } catch (error: any) {
-      console.error('❌ WhatsApp: Automatic reminders failed:', error);
-      return [{
-        success: false,
-        error: error.message || 'Failed to send automatic reminders'
-      }];
-    }
-  }
-  
-  // Send automatic reminder for a specific task
-  private async sendAutomaticReminder(taskId: string, task: any): Promise<ReminderResult> {
-    try {
-      // Get team and user details
-      const teamSnap = await getDocs(collection(db, 'teams'));
-      const team = teamSnap.docs.find(doc => doc.id === task.teamId)?.data();
-      
-      const userSnap = await getDocs(collection(db, 'users'));
-      const user = userSnap.docs.find(doc => doc.id === task.assignedTo)?.data();
-      
-      if (!team || !user) {
-        return {
-          success: false,
-          error: 'Team or user not found'
+
+      // Create overdue reminder (24 hours after due date)
+      if (settings.overdueReminders) {
+        const overdueTime = new Date(dueDate.getTime() + (24 * 60 * 60 * 1000));
+        
+        const overdueReminder: Omit<TaskReminder, 'id'> = {
+          taskId: task.id!,
+          userId,
+          phoneNumber,
+          reminderType: 'overdue',
+          intervalHours: 24,
+          scheduledTime: overdueTime,
+          status: 'pending',
+          message: this.generateReminderMessage(task, 'overdue', 24),
+          createdAt: now,
+          updatedAt: now
         };
+
+        const overdueRef = await addDoc(collection(db, 'taskReminders'), overdueReminder);
+        remindersCreated.push({ id: overdueRef.id, ...overdueReminder });
       }
-      
-      // Check if user has WhatsApp notifications enabled
-      if (!user.preferences?.notifications?.whatsapp) {
-        return {
-          success: false,
-          error: 'User has WhatsApp notifications disabled'
-        };
-      }
-      
-      // Get user's WhatsApp number
-      const whatsappNumber = user.phone || user.whatsappNumber;
-      if (!whatsappNumber) {
-        return {
-          success: false,
-          error: 'User has no WhatsApp number configured'
-        };
-      }
-      
-      // Create automatic reminder message
-      const message = `🚨 URGENT: Task Overdue\n\n📋 Task: ${task.title}\n👥 Team: ${team.name}\n⏰ Due: ${task.dueDate?.toDate?.() ? task.dueDate.toDate().toLocaleString() : 'No due date'}\n👤 Assigned to: ${user.displayName || user.email}\n\n⚠️ This task is overdue! Please complete it immediately.`;
-      
-      // Send WhatsApp message
-      const whatsappResult = await this.sendWhatsAppMessage(whatsappNumber, message);
-      
-      if (!whatsappResult.success) {
-        return {
-          success: false,
-          error: `WhatsApp sending failed: ${whatsappResult.error}`
-        };
-      }
-      
-      // Create reminder record
-      const reminderData: Omit<TaskReminder, 'id'> = {
-        taskId,
-        taskTitle: task.title,
-        teamId: task.teamId,
-        teamName: team.name,
-        userId: task.assignedTo,
-        userName: user.displayName || user.email,
-        dueDate: task.dueDate?.toDate?.() || new Date(),
-        reminderTime: new Date(),
-        status: 'sent',
-        type: 'automatic',
-        whatsappNumber,
-        message,
-        createdAt: new Date(),
-        sentAt: new Date()
-      };
-      
-      await addDoc(collection(db, 'reminders'), reminderData);
-      
-      return {
-        success: true,
-        message: 'Automatic reminder sent successfully'
-      };
-      
-    } catch (error: any) {
-      return {
-        success: false,
-        error: error.message || 'Failed to send automatic reminder'
+
+      console.log(`✅ WhatsApp Reminder Service: Created ${remindersCreated.length} reminders for task ${task.id}`);
+      return { success: true, remindersCreated: remindersCreated.length };
+
+    } catch (error) {
+      console.error('❌ WhatsApp Reminder Service: Error creating task reminders:', error);
+      return { 
+        success: false, 
+        remindersCreated: 0, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
       };
     }
   }
-  
-  // Send WhatsApp message (placeholder - integrate with actual API)
-  private async sendWhatsAppMessage(phoneNumber: string, message: string): Promise<{ success: boolean; error?: string }> {
+
+  // Process pending reminders
+  private async processPendingReminders(): Promise<void> {
     try {
-      // This is a placeholder implementation
-      // You'll need to integrate with WhatsApp Business API or a service like Twilio
-      
-      console.log('📱 WhatsApp: Sending message to:', phoneNumber);
-      console.log('📱 WhatsApp: Message:', message);
-      
-      // For now, we'll simulate success
-      // In production, replace this with actual WhatsApp API call
-      
-      // Example with Twilio WhatsApp API:
-      // const response = await fetch('https://api.twilio.com/2010-04-01/Accounts/YOUR_ACCOUNT_SID/Messages.json', {
-      //   method: 'POST',
-      //   headers: {
-      //     'Authorization': 'Basic ' + btoa('YOUR_ACCOUNT_SID:YOUR_AUTH_TOKEN'),
-      //     'Content-Type': 'application/x-www-form-urlencoded'
-      //   },
-      //   body: new URLSearchParams({
-      //     'From': 'whatsapp:+14155238886',
-      //     'To': `whatsapp:${phoneNumber}`,
-      //     'Body': message
-      //   })
-      // });
-      
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      console.log('✅ WhatsApp: Message sent successfully (simulated)');
-      
-      return { success: true };
-      
-    } catch (error: any) {
-      console.error('❌ WhatsApp: Message sending failed:', error);
-      return {
-        success: false,
-        error: error.message || 'Failed to send WhatsApp message'
-      };
-    }
-  }
-  
-  // Get reminder history for a user
-  async getUserReminders(userId: string): Promise<TaskReminder[]> {
-    try {
-      const remindersQuery = query(
-        collection(db, 'reminders'),
-        where('userId', '==', userId)
+      const now = new Date();
+      const pendingRemindersQuery = query(
+        collection(db, 'taskReminders'),
+        where('status', '==', 'pending'),
+        where('scheduledTime', '<=', now)
       );
-      
-      const remindersSnap = await getDocs(remindersQuery);
-      return remindersSnap.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as TaskReminder[];
-      
-    } catch (error: any) {
-      console.error('❌ WhatsApp: Failed to get user reminders:', error);
-      return [];
+
+      const snapshot = await getDocs(pendingRemindersQuery);
+      const reminders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TaskReminder));
+
+      console.log(`🔄 WhatsApp Reminder Service: Processing ${reminders.length} pending reminders`);
+
+      for (const reminder of reminders) {
+        await this.sendReminder(reminder);
+      }
+
+    } catch (error) {
+      console.error('❌ WhatsApp Reminder Service: Error processing pending reminders:', error);
     }
   }
-  
-  // Update reminder settings for a user
-  async updateReminderSettings(userId: string, settings: Partial<ReminderSettings>): Promise<ReminderResult> {
+
+  // Send a specific reminder
+  private async sendReminder(reminder: TaskReminder): Promise<void> {
     try {
-      const userRef = doc(db, 'users', userId);
-      await updateDoc(userRef, {
-        'preferences.reminderSettings': settings,
-        updatedAt: new Date()
+      console.log(`📱 WhatsApp Reminder Service: Sending reminder ${reminder.id} to ${reminder.phoneNumber}`);
+
+      // Update reminder status to processing
+      await updateDoc(doc(db, 'taskReminders', reminder.id), {
+        status: 'sent',
+        sentTime: serverTimestamp(),
+        updatedAt: serverTimestamp()
       });
+
+      // Send WhatsApp message
+      const success = await this.sendWhatsAppReminder(reminder);
+
+      if (success) {
+        console.log(`✅ WhatsApp Reminder Service: Reminder ${reminder.id} sent successfully`);
+      } else {
+        // Mark as failed
+        await updateDoc(doc(db, 'taskReminders', reminder.id), {
+          status: 'failed',
+          updatedAt: serverTimestamp()
+        });
+        console.log(`❌ WhatsApp Reminder Service: Failed to send reminder ${reminder.id}`);
+      }
+
+    } catch (error) {
+      console.error(`❌ WhatsApp Reminder Service: Error sending reminder ${reminder.id}:`, error);
       
-      return {
-        success: true,
-        message: 'Reminder settings updated successfully'
-      };
-      
-    } catch (error: any) {
-      return {
-        success: false,
-        error: error.message || 'Failed to update reminder settings'
-      };
+      // Mark as failed
+      try {
+        await updateDoc(doc(db, 'taskReminders', reminder.id), {
+          status: 'failed',
+          updatedAt: serverTimestamp()
+        });
+      } catch (updateError) {
+        console.error('❌ WhatsApp Reminder Service: Error updating reminder status:', updateError);
+      }
     }
   }
-  
-  // Schedule reminder for future
-  async scheduleReminder(
-    taskId: string,
-    userId: string,
-    reminderTime: Date,
-    message: string
-  ): Promise<ReminderResult> {
+
+  // Send WhatsApp reminder message
+  private async sendWhatsAppReminder(reminder: TaskReminder): Promise<boolean> {
     try {
-      const reminderData: Omit<TaskReminder, 'id'> = {
-        taskId,
-        taskTitle: '', // Will be filled when reminder is sent
-        teamId: '',
-        teamName: '',
-        userId,
-        userName: '',
-        dueDate: new Date(),
-        reminderTime,
-        status: 'pending',
-        type: 'manual',
-        message,
+      // Get task details
+      const taskDoc = await getDoc(doc(db, 'tasks', reminder.taskId));
+      if (!taskDoc.exists()) {
+        console.log(`⚠️ WhatsApp Reminder Service: Task ${reminder.taskId} not found`);
+        return false;
+      }
+
+      const task = taskDoc.data() as Task;
+
+      // Create notification data for admin WhatsApp service
+      const notificationData = {
+        taskId: task.id!,
+        taskTitle: task.title,
+        taskDescription: task.description || '',
+        teamId: task.teamId || null,
+        teamName: task.teamId ? 'Team Task' : 'Individual Task',
+        assignedTo: reminder.userId,
+        assignedToName: 'User', // We'll get this from user data if needed
+        priority: task.priority,
+        dueDate: task.dueDate ? new Date(task.dueDate) : new Date(),
+        taskLink: `${window.location.origin}/tasks/${task.id}`,
         createdAt: new Date()
       };
+
+      // Send using admin WhatsApp service
+      const result = await adminWhatsAppService.sendTaskCreationNotification(notificationData, reminder.userId);
+      return result.success;
+
+    } catch (error) {
+      console.error('❌ WhatsApp Reminder Service: Error sending WhatsApp reminder:', error);
+      return false;
+    }
+  }
+
+  // Generate reminder message
+  private generateReminderMessage(task: Task, type: 'before_due' | 'overdue', intervalHours: number): string {
+    const dueDate = task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'No due date';
+    
+    if (type === 'overdue') {
+      return `🚨 URGENT: Task "${task.title}" is overdue! Please complete it immediately.`;
+    } else {
+      const timeLeft = intervalHours < 24 ? `${intervalHours} hours` : `${Math.floor(intervalHours / 24)} days`;
+      return `🔔 Reminder: Task "${task.title}" is due in ${timeLeft}. Please complete it soon.`;
+    }
+  }
+
+  // Get user's reminder settings
+  async getUserReminderSettings(userId: string): Promise<ReminderSettings> {
+    try {
+      const settingsDoc = await getDoc(doc(db, 'reminderSettings', userId));
       
-      const reminderRef = await addDoc(collection(db, 'reminders'), reminderData);
-      
+      if (settingsDoc.exists()) {
+        return settingsDoc.data() as ReminderSettings;
+      }
+
+      // Return default settings
       return {
-        success: true,
-        message: 'Reminder scheduled successfully',
-        reminderId: reminderRef.id
+        userId,
+        enabled: true,
+        intervals: [24, 8, 4], // Default: 1 day, 8 hours, 4 hours before due
+        beforeDueReminders: true,
+        overdueReminders: true,
+        reminderTime: '09:00',
+        timezone: 'UTC',
+        updatedAt: new Date()
       };
-      
-    } catch (error: any) {
+
+    } catch (error) {
+      console.error('❌ WhatsApp Reminder Service: Error getting user reminder settings:', error);
       return {
-        success: false,
-        error: error.message || 'Failed to schedule reminder'
+        userId,
+        enabled: false,
+        intervals: [],
+        beforeDueReminders: false,
+        overdueReminders: false,
+        reminderTime: '09:00',
+        timezone: 'UTC',
+        updatedAt: new Date()
       };
     }
+  }
+
+  // Update user's reminder settings
+  async updateUserReminderSettings(userId: string, settings: Partial<ReminderSettings>): Promise<{
+    success: boolean;
+    error?: string;
+  }> {
+    try {
+      const updatedSettings: ReminderSettings = {
+        userId,
+        enabled: settings.enabled ?? true,
+        intervals: settings.intervals ?? [24, 8, 4],
+        beforeDueReminders: settings.beforeDueReminders ?? true,
+        overdueReminders: settings.overdueReminders ?? true,
+        reminderTime: settings.reminderTime ?? '09:00',
+        timezone: settings.timezone ?? 'UTC',
+        updatedAt: new Date()
+      };
+
+      await setDoc(doc(db, 'reminderSettings', userId), updatedSettings, { merge: true });
+      console.log(`✅ WhatsApp Reminder Service: Updated reminder settings for user ${userId}`);
+      return { success: true };
+
+    } catch (error) {
+      console.error('❌ WhatsApp Reminder Service: Error updating reminder settings:', error);
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      };
+    }
+  }
+
+  // Cancel all reminders for a task
+  async cancelTaskReminders(taskId: string): Promise<{
+    success: boolean;
+    cancelledCount: number;
+    error?: string;
+  }> {
+    try {
+      const remindersQuery = query(
+        collection(db, 'taskReminders'),
+        where('taskId', '==', taskId),
+        where('status', '==', 'pending')
+      );
+
+      const snapshot = await getDocs(remindersQuery);
+      let cancelledCount = 0;
+
+      for (const docSnapshot of snapshot.docs) {
+        await updateDoc(doc(db, 'taskReminders', docSnapshot.id), {
+          status: 'cancelled',
+          updatedAt: serverTimestamp()
+        });
+        cancelledCount++;
+      }
+
+      console.log(`✅ WhatsApp Reminder Service: Cancelled ${cancelledCount} reminders for task ${taskId}`);
+      return { success: true, cancelledCount };
+
+    } catch (error) {
+      console.error('❌ WhatsApp Reminder Service: Error cancelling task reminders:', error);
+      return { 
+        success: false, 
+        cancelledCount: 0, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      };
+    }
+  }
+
+  // Get reminder statistics for a user
+  async getUserReminderStats(userId: string): Promise<{
+    totalReminders: number;
+    sentReminders: number;
+    pendingReminders: number;
+    failedReminders: number;
+  }> {
+    try {
+      const remindersQuery = query(
+        collection(db, 'taskReminders'),
+        where('userId', '==', userId)
+      );
+
+      const snapshot = await getDocs(remindersQuery);
+      const reminders = snapshot.docs.map(doc => doc.data() as TaskReminder);
+
+      return {
+        totalReminders: reminders.length,
+        sentReminders: reminders.filter(r => r.status === 'sent').length,
+        pendingReminders: reminders.filter(r => r.status === 'pending').length,
+        failedReminders: reminders.filter(r => r.status === 'failed').length
+      };
+
+    } catch (error) {
+      console.error('❌ WhatsApp Reminder Service: Error getting reminder stats:', error);
+      return {
+        totalReminders: 0,
+        sentReminders: 0,
+        pendingReminders: 0,
+        failedReminders: 0
+      };
+    }
+  }
+
+  // Get service status
+  getStatus(): { initialized: boolean; schedulerRunning: boolean } {
+    return {
+      initialized: this.isInitialized,
+      schedulerRunning: this.reminderCheckInterval !== null
+    };
   }
 }
 
-export const whatsappReminderService = new WhatsAppReminderService();
-export default whatsappReminderService;
+// Export singleton instance
+export const whatsAppReminderService = new WhatsAppReminderService();
+export default WhatsAppReminderService;

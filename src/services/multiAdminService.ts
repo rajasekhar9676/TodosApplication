@@ -32,9 +32,9 @@ export class MultiAdminService {
   // Default admin accounts that will be created if they don't exist
   private static readonly DEFAULT_ADMINS = [
     {
-      email: 'mrajasekhar9676@gmail.com',
-      password: 'Raja@2025',
-      displayName: 'Super Admin Raja',
+      email: 'anilsharma@educationtoday.co',
+      password: 'Anilsharma@1234',
+      displayName: 'Super Admin Anil Sharma',
       role: 'super_admin' as const,
       permissions: ['all'],
       canCreateUsers: true,

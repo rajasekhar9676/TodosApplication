@@ -7,6 +7,8 @@ import { collection, getDocs, doc, getDoc, updateDoc, addDoc, serverTimestamp, o
 import CreateUserForm from './CreateUserForm';
 import AdminManagement from './AdminManagement';
 import EditUserModal from './EditUserModal';
+import ReminderSettingsModal from './ReminderSettingsModal';
+import { whatsAppReminderService } from '../services/whatsappReminderService';
 
 // Admin interfaces
 interface AdminStats {
@@ -131,6 +133,10 @@ const AdminDashboard: React.FC = () => {
   // Edit user modal state
   const [showEditUserModal, setShowEditUserModal] = useState(false);
   const [selectedUserForEdit, setSelectedUserForEdit] = useState<UserData | null>(null);
+  
+  // Reminder settings modal state
+  const [showReminderSettings, setShowReminderSettings] = useState(false);
+  const [selectedUserForReminders, setSelectedUserForReminders] = useState<UserData | null>(null);
 
   useEffect(() => {
     // Check admin status using the new service
@@ -148,6 +154,9 @@ const AdminDashboard: React.FC = () => {
     
     // Initialize WhatsApp service
     adminWhatsAppService.initialize(apiKey);
+    
+    // Initialize WhatsApp reminder service
+    whatsAppReminderService.initialize();
     
     // Load data when admin is authenticated
     loadAdminData();
@@ -730,6 +739,11 @@ const AdminDashboard: React.FC = () => {
     loadAdminData(); // Refresh the data
   };
 
+  const handleReminderSettings = (user: UserData) => {
+    setSelectedUserForReminders(user);
+    setShowReminderSettings(true);
+  };
+
   const handleCreateTask = async () => {
     try {
       // Check if we're in individual task mode or group task mode
@@ -820,6 +834,49 @@ const AdminDashboard: React.FC = () => {
             
             if (result.success) {
               console.log('✅ Admin: WhatsApp notification sent successfully');
+              
+              // Create automatic reminders for the task
+              if (newTask.dueDate) {
+                console.log('⏰ Admin: Creating automatic reminders...');
+                
+                // Get user phone number for reminders
+                const userDoc = await getDoc(doc(db, 'users', newTask.assignedTo));
+                const userData = userDoc.data();
+                const userPhoneNumber = userData?.phoneNumber;
+                
+                if (userPhoneNumber) {
+                  // Create complete task object for reminders
+                  const completeTask = {
+                    id: docRef.id, // Use the Firestore document ID
+                    title: newTask.title,
+                    description: newTask.description,
+                    category: 'work', // Default category
+                    taskType: (newTask.teamId ? 'team' : 'individual') as 'team' | 'individual',
+                    status: newTask.status as 'TO-DO' | 'IN-PROGRESS' | 'COMPLETED',
+                    priority: newTask.priority as 'low' | 'medium' | 'high',
+                    dueDate: newTask.dueDate?.toISOString() || '', // Convert Date to string
+                    assignedTo: newTask.assignedTo,
+                    teamId: newTask.teamId || undefined,
+                    createdBy: currentAdmin?.uid || 'admin',
+                    createdAt: new Date(),
+                    updatedAt: new Date()
+                  };
+                  
+                  const reminderResult = await whatsAppReminderService.createTaskReminders(
+                    completeTask,
+                    newTask.assignedTo,
+                    userPhoneNumber
+                  );
+
+                  if (reminderResult.success) {
+                    console.log(`✅ Admin: Created ${reminderResult.remindersCreated} reminders for task`);
+                  } else {
+                    console.error('❌ Admin: Failed to create reminders:', reminderResult.error);
+                  }
+                } else {
+                  console.log('⚠️ Admin: No phone number available for reminders');
+                }
+              }
             } else {
               console.log('⚠️ Admin: WhatsApp notification failed:', result.message);
             }
@@ -1439,6 +1496,18 @@ const AdminDashboard: React.FC = () => {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                               </svg>
                             </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleReminderSettings(user);
+                              }}
+                              className="p-1 text-green-600 hover:text-green-800 hover:bg-green-100 rounded transition-colors"
+                              title="Reminder Settings"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-5 5v-5zM4.5 19.5a2.5 2.5 0 01-2.5-2.5V6a2.5 2.5 0 012.5-2.5h15A2.5 2.5 0 0122 6v11a2.5 2.5 0 01-2.5 2.5h-15z" />
+                              </svg>
+                            </button>
                           </div>
                         )}
                       </div>
@@ -2008,6 +2077,14 @@ const AdminDashboard: React.FC = () => {
             onUserUpdated={handleUserUpdated}
             onUserDeleted={handleUserDeleted}
             isSuperAdmin={currentAdmin?.role === 'super_admin' || false}
+          />
+
+          {/* Reminder Settings Modal */}
+          <ReminderSettingsModal
+            isOpen={showReminderSettings}
+            onClose={() => setShowReminderSettings(false)}
+            userId={selectedUserForReminders?.id || ''}
+            userName={selectedUserForReminders?.displayName || ''}
           />
        </div>
      </div>

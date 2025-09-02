@@ -17,7 +17,7 @@ import Calendar from './pages/Calendar';
 import VoiceRecordings from './pages/VoiceRecordings';
 import InviteAccept from './pages/InviteAccept';
 import SimpleWhatsAppReminder from './components/SimpleWhatsAppReminder';
-import WhatsAppReminder from './components/WhatsAppReminder';
+
 import AdminDashboard from './components/AdminDashboard';
 import AdminLogin from './components/AdminLogin';
 import DebugPage from './components/DebugPage';

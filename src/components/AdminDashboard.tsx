@@ -1240,7 +1240,7 @@ const AdminDashboard: React.FC = () => {
                     </button>
                     
                     {/* Admin Management Button - Only show for super admins and admins */}
-                    {(currentAdmin?.role === 'super_admin' || currentAdmin?.role === 'admin') && (
+                    {(currentAdmin?.role === 'super_admin' ) && (
                       <button
                         onClick={() => setShowAdminManagement(true)}
                         className="px-4 lg:px-6 py-2 lg:py-3 bg-orange-500 hover:bg-orange-600 rounded-xl transition-all duration-200 text-white font-medium shadow-lg hover:shadow-xl text-sm lg:text-base"

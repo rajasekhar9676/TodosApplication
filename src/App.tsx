@@ -24,9 +24,10 @@ import DebugPage from './components/DebugPage';
 import TemplateTest from './components/TemplateTest';
 import ErrorLogger from './components/ErrorLogger';
 import ErrorBoundary from './components/ErrorBoundary';
+import UserManagement from './components/UserManagement';
 
 const AppContent: React.FC = () => {
-  const { user, loading } = useAuth();
+  const { user, loading, role } = useAuth();
 
   if (loading) {
     return (
@@ -66,6 +67,9 @@ const AppContent: React.FC = () => {
               <Route path="/whatsapp-reminders" element={<SimpleWhatsAppReminder />} />
               <Route path="/template-test" element={<TemplateTest />} />
               <Route path="/debug" element={<DebugPage />} />
+              {role === 'superadmin' && (
+                <Route path="/user-management" element={<UserManagement />} />
+              )}
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>

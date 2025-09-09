@@ -76,7 +76,7 @@ interface CreateTeamForm {
   members: string[];
 }
 
-type ViewMode = 'overview' | 'users' | 'teams' | 'tasks' | 'create-team' | 'create-individual-task' | 'create-group-task';
+type ViewMode = 'overview' | 'users' | 'teams' | 'tasks' | 'create-team' | 'create-individual-task' | 'create-group-task' | 'organize';
 
 const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -137,38 +137,33 @@ const AdminDashboard: React.FC = () => {
   // Reminder settings modal state
   const [showReminderSettings, setShowReminderSettings] = useState(false);
   const [selectedUserForReminders, setSelectedUserForReminders] = useState<UserData | null>(null);
+  
+  // Organize modals
+  const [showCreateFolderModal, setShowCreateFolderModal] = useState(false);
+  const [showCreateFileModal, setShowCreateFileModal] = useState(false);
+  const [authRequired, setAuthRequired] = useState(false);
 
   useEffect(() => {
-    // Check admin status using the new service
+    // Gate admin access without hard redirect
     if (!MultiAdminService.isAdmin()) {
-      navigate('/admin_login');
+      setAuthRequired(true);
+      setLoading(false);
       return;
     }
-    
+
     // Get current admin user
     const admin = MultiAdminService.getCurrentAdmin();
     setCurrentAdmin(admin);
-    
-    // Initialize WhatsApp service
+
     const apiKey = process.env.REACT_APP_DOUBLE_TICK_API_KEY || 'key_XAKKhG3Xdz';
-    
-    // Initialize WhatsApp service
     adminWhatsAppService.initialize(apiKey);
-    
-    // Initialize WhatsApp reminder service
     whatsAppReminderService.initialize();
-    
-    // Load data when admin is authenticated
+
     loadAdminData();
-    
-    // Set up real-time listeners for tasks
+
     const unsubscribe = setupRealtimeListeners();
-    
-    // Cleanup function to unsubscribe from listeners
     return () => {
-      if (unsubscribe) {
-        unsubscribe();
-      }
+      if (unsubscribe) unsubscribe();
     };
   }, [navigate]);
 
@@ -216,9 +211,8 @@ const AdminDashboard: React.FC = () => {
     try {
       setLoading(true);
       
-      // Check admin status
       if (!MultiAdminService.isAdmin()) {
-        navigate('/admin_login');
+        setAuthRequired(true);
         return;
       }
       
@@ -1045,63 +1039,96 @@ const AdminDashboard: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const adminEmail = sessionStorage.getItem('adminEmail');
 
-     if (loading || !adminEmail) {
-     return (
-       <div className={`min-h-screen flex items-center justify-center ${isDarkTheme ? 'bg-gray-900' : 'bg-white'}`}>
-         <div className="text-center">
-           <div className={`animate-spin rounded-full h-16 w-16 border-b-2 mx-auto mb-4 ${isDarkTheme ? 'border-purple-500' : 'border-blue-600'}`}></div>
-           <p className={`text-lg ${isDarkTheme ? 'text-purple-400' : 'text-blue-600'}`}>
-             {!adminEmail ? 'Waiting for admin authentication...' : 'Loading Admin Dashboard...'}
-           </p>
-           {!adminEmail && (
-             <p className={`text-sm mt-2 ${isDarkTheme ? 'text-purple-300' : 'text-blue-500'}`}>
-               Please login as admin first
-             </p>
-           )}
-         </div>
-       </div>
-     );
-   }
+  // Inline auth gate UI
+  if (authRequired) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="p-8 rounded-xl border shadow-sm text-center max-w-md">
+          <h2 className="text-xl font-semibold mb-2">Admin Session Required</h2>
+          <p className="text-gray-600 mb-4">Please sign in to access the Admin Dashboard.</p>
+          <button
+            onClick={() => navigate('/admin_login')}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg"
+          >
+            Go to Admin Login
+          </button>
+        </div>
+      </div>
+    );
+  }
 
-                           return (
-     <div className={`min-h-screen flex ${isDarkTheme ? 'bg-gray-900' : 'bg-white'}`}>
+  if (loading || !adminEmail) {
+    return (
+      <div className={`min-h-screen flex items-center justify-center ${isDarkTheme ? 'bg-gray-900' : 'bg-white'}`}>
+        <div className="text-center">
+          <div className={`animate-spin rounded-full h-16 w-16 border-b-2 mx-auto mb-4 ${isDarkTheme ? 'border-purple-500' : 'border-blue-600'}`}></div>
+          <p className={`text-lg ${isDarkTheme ? 'text-purple-400' : 'text-blue-600'}`}>
+            {!adminEmail ? 'Waiting for admin authentication...' : 'Loading Admin Dashboard...'}
+          </p>
+          {!adminEmail && (
+            <p className={`text-sm mt-2 ${isDarkTheme ? 'text-purple-300' : 'text-blue-500'}`}>
+              Please login as admin first
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`min-h-screen h-screen flex overflow-hidden text-[14px] md:text-[15px] ${isDarkTheme ? 'bg-gray-900' : 'bg-white'}`}>
       {/* Mobile Sidebar Toggle */}
       <div className="lg:hidden fixed top-4 left-4 z-50">
-       <button
-         onClick={() => setSidebarOpen(!sidebarOpen)}
-         className="p-2 bg-white rounded-lg shadow-lg border border-gray-200"
-       >
-         <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
-         </svg>
-       </button>
-     </div>
+        <button
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          className="p-2 bg-white rounded-lg shadow-lg border border-gray-200"
+        >
+          <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+      </div>
 
-                         {/* Sidebar */}
-               <div className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 fixed lg:block inset-y-0 left-0 z-40 w-72 border-r-2 h-screen shadow-xl transition-transform duration-300 ease-in-out ${
-          isDarkTheme 
-            ? 'bg-gray-800 border-purple-600 text-white' 
-            : 'bg-gray-50 border-gray-300 text-gray-800'
-        }`}>
-       <div className="p-4 lg:p-8">
-          {/* Logo Section */}
-                     <div className="flex items-center space-x-4 mb-8 lg:mb-12">
-             <div className={`w-10 h-10 lg:w-12 lg:h-12 rounded-xl flex items-center justify-center shadow-lg ${
-               isDarkTheme 
-                 ? 'bg-gradient-to-br from-purple-500 to-pink-600' 
-                 : 'bg-gradient-to-br from-blue-500 to-purple-600'
-             }`}>
-               <span className="text-white text-xl lg:text-2xl font-bold">👑</span>
-             </div>
-             <div>
-               <h1 className={`text-lg lg:text-2xl font-bold tracking-tight ${isDarkTheme ? 'text-white' : 'text-gray-800'}`}>Admin Panel</h1>
-               <p className={`text-xs lg:text-sm font-medium ${isDarkTheme ? 'text-purple-300' : 'text-gray-500'}`}>Control Center</p>
-             </div>
-           </div>
-          
-          {/* Navigation */}
-          <nav className="space-y-2 lg:space-y-3">
-                         <button
+      {/* Sidebar */}
+      <div className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 fixed lg:block inset-y-0 left-0 z-40 w-72 border-r-2 h-screen shadow-xl transition-transform duration-300 ease-in-out overflow-y-auto ${
+        isDarkTheme 
+          ? 'bg-gray-800 border-purple-600 text-white' 
+          : 'bg-gray-50 border-gray-300 text-gray-800'
+      }`}>
+      <div className="p-4 lg:p-8">
+         {/* Logo Section */}
+                    <div className="flex items-center space-x-4 mb-8 lg:mb-12">
+              <div className={`w-10 h-10 lg:w-12 lg:h-12 rounded-xl flex items-center justify-center shadow-lg ${
+                isDarkTheme 
+                  ? 'bg-gradient-to-br from-purple-500 to-pink-600' 
+                  : 'bg-gradient-to-br from-blue-500 to-purple-600'
+              }`}>
+                <span className="text-white text-xl lg:text-2xl font-bold">👑</span>
+              </div>
+              <div>
+                <h1 className={`text-base lg:text-xl font-bold tracking-tight ${isDarkTheme ? 'text-white' : 'text-gray-800'}`}>Admin Panel</h1>
+                <p className={`text-xs lg:text-sm font-medium ${isDarkTheme ? 'text-purple-300' : 'text-gray-500'}`}>Control Center</p>
+              </div>
+            </div>
+           
+           {/* Navigation */}
+           <nav className="space-y-2 lg:space-y-3">
+             <button
+               onClick={() => { setViewMode('organize'); setSidebarOpen(false); }}
+               className={`w-full text-left px-4 lg:px-6 py-3 lg:py-4 rounded-xl transition-all duration-200 font-medium text-base lg:text-lg ${
+                 viewMode === 'organize' 
+                   ? isDarkTheme
+                     ? 'bg-gradient-to-r from-purple-900 to-pink-800 text-white border-2 border-purple-400 shadow-md'
+                     : 'bg-gradient-to-r from-blue-50 to-purple-50 text-blue-700 border-2 border-blue-200 shadow-md'
+                   : isDarkTheme
+                     ? 'text-purple-200 hover:bg-gray-700 hover:text-white hover:shadow-sm'
+                     : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800 hover:shadow-sm'
+               }`}
+             >
+               <span className="text-lg lg:text-xl mr-3">🗂️</span>
+               Organize
+             </button>
+             <button
                onClick={() => { setViewMode('overview'); setSidebarOpen(false); }}
                className={`w-full text-left px-4 lg:px-6 py-3 lg:py-4 rounded-xl transition-all duration-200 font-medium text-base lg:text-lg ${
                  viewMode === 'overview' 
@@ -1113,92 +1140,92 @@ const AdminDashboard: React.FC = () => {
                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800 hover:shadow-sm'
                }`}
              >
-              <span className="text-lg lg:text-xl mr-3">📊</span>
-              Overview
-            </button>
-            <button
-              onClick={() => { setViewMode('users'); setSidebarOpen(false); }}
-              className={`w-full text-left px-4 lg:px-6 py-3 lg:py-4 rounded-xl transition-all duration-200 font-medium text-base lg:text-lg ${
-                viewMode === 'users' 
-                  ? 'bg-gradient-to-r from-blue-50 to-purple-50 text-blue-700 border-2 border-blue-200 shadow-md' 
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800 hover:shadow-sm'
-              }`}
-            >
-              <span className="text-lg lg:text-xl mr-3">👥</span>
-              Users
-            </button>
-            <button
-              onClick={() => { setViewMode('teams'); setSidebarOpen(false); }}
-              className={`w-full text-left px-4 lg:px-6 py-3 lg:py-4 rounded-xl transition-all duration-200 font-medium text-base lg:text-lg ${
-                viewMode === 'teams' 
-                  ? 'bg-gradient-to-r from-blue-50 to-purple-50 text-blue-700 border-2 border-blue-200 shadow-md' 
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800 hover:shadow-sm'
-              }`}
-            >
-              <span className="text-lg lg:text-xl mr-3">🏢</span>
-              Teams
-            </button>
-            <button
-              onClick={() => { setViewMode('tasks'); setSidebarOpen(false); }}
-              className={`w-full text-left px-4 lg:px-6 py-3 lg:py-4 rounded-xl transition-all duration-200 font-medium text-base lg:text-lg ${
-                viewMode === 'tasks' 
-                  ? 'bg-gradient-to-r from-blue-50 to-purple-50 text-blue-700 border-2 border-blue-200 shadow-md' 
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800 hover:shadow-sm'
-              }`}
-            >
-              <span className="text-lg lg:text-xl mr-3">✅</span>
-              Tasks
-            </button>
-                         <button
-               onClick={() => { setViewMode('create-individual-task'); setSidebarOpen(false); }}
-               className={`w-full text-left px-4 lg:px-6 py-3 lg:py-4 rounded-xl transition-all duration-200 font-medium text-base lg:text-lg ${
-                 viewMode === 'create-individual-task' 
-                   ? 'bg-gradient-to-r from-blue-50 to-purple-50 text-blue-700 border-2 border-blue-200 shadow-md' 
-                   : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800 hover:shadow-sm'
-               }`}
-             >
-               <span className="text-lg lg:text-xl mr-3">👤</span>
-               Individual Task
+               <span className="text-lg lg:text-xl mr-3">📊</span>
+               Overview
              </button>
              <button
-               onClick={() => { setViewMode('create-group-task'); setSidebarOpen(false); }}
+               onClick={() => { setViewMode('users'); setSidebarOpen(false); }}
                className={`w-full text-left px-4 lg:px-6 py-3 lg:py-4 rounded-xl transition-all duration-200 font-medium text-base lg:text-lg ${
-                 viewMode === 'create-group-task' 
+                 viewMode === 'users' 
                    ? 'bg-gradient-to-r from-blue-50 to-purple-50 text-blue-700 border-2 border-blue-200 shadow-md' 
                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800 hover:shadow-sm'
                }`}
              >
                <span className="text-lg lg:text-xl mr-3">👥</span>
-               Group Task
+               Users
              </button>
              <button
-               onClick={() => { setViewMode('create-team'); setSidebarOpen(false); }}
+               onClick={() => { setViewMode('teams'); setSidebarOpen(false); }}
                className={`w-full text-left px-4 lg:px-6 py-3 lg:py-4 rounded-xl transition-all duration-200 font-medium text-base lg:text-lg ${
-                 viewMode === 'create-team' 
+                 viewMode === 'teams' 
                    ? 'bg-gradient-to-r from-blue-50 to-purple-50 text-blue-700 border-2 border-blue-200 shadow-md' 
                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800 hover:shadow-sm'
                }`}
              >
                <span className="text-lg lg:text-xl mr-3">🏢</span>
-               Create Team
+               Teams
              </button>
-                    </nav>
-          
-
-          
-          {/* Logout Section */}
-          <div className={`mt-8 lg:mt-12 pt-6 lg:pt-8 border-t ${isDarkTheme ? 'border-gray-600' : 'border-gray-200'}`}>
-                         <button
-               onClick={handleLogout}
-               className={`w-full px-4 lg:px-6 py-3 lg:py-4 rounded-xl transition-all duration-200 text-white font-semibold text-base lg:text-lg shadow-lg hover:shadow-xl ${
-                 isDarkTheme
-                   ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700'
-                   : 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700'
+             <button
+               onClick={() => { setViewMode('tasks'); setSidebarOpen(false); }}
+               className={`w-full text-left px-4 lg:px-6 py-3 lg:py-4 rounded-xl transition-all duration-200 font-medium text-base lg:text-lg ${
+                 viewMode === 'tasks' 
+                   ? 'bg-gradient-to-r from-blue-50 to-purple-50 text-blue-700 border-2 border-blue-200 shadow-md' 
+                   : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800 hover:shadow-sm'
                }`}
              >
-               <span className="text-lg lg:text-xl mr-3">🚪</span>
-               Logout Admin
+               <span className="text-lg lg:text-xl mr-3">✅</span>
+               Tasks
              </button>
+                              <button
+                onClick={() => { setViewMode('create-individual-task'); setSidebarOpen(false); }}
+                className={`w-full text-left px-4 lg:px-6 py-3 lg:py-4 rounded-xl transition-all duration-200 font-medium text-base lg:text-lg ${
+                  viewMode === 'create-individual-task' 
+                    ? 'bg-gradient-to-r from-blue-50 to-purple-50 text-blue-700 border-2 border-blue-200 shadow-md' 
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800 hover:shadow-sm'
+                }`}
+              >
+                <span className="text-lg lg:text-xl mr-3">👤</span>
+                Individual Task
+              </button>
+              <button
+                onClick={() => { setViewMode('create-group-task'); setSidebarOpen(false); }}
+                className={`w-full text-left px-4 lg:px-6 py-3 lg:py-4 rounded-xl transition-all duration-200 font-medium text-base lg:text-lg ${
+                  viewMode === 'create-group-task' 
+                    ? 'bg-gradient-to-r from-blue-50 to-purple-50 text-blue-700 border-2 border-blue-200 shadow-md' 
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800 hover:shadow-sm'
+                }`}
+              >
+                <span className="text-lg lg:text-xl mr-3">👥</span>
+                Group Task
+              </button>
+              <button
+                onClick={() => { setViewMode('create-team'); setSidebarOpen(false); }}
+                className={`w-full text-left px-4 lg:px-6 py-3 lg:py-4 rounded-xl transition-all duration-200 font-medium text-base lg:text-lg ${
+                  viewMode === 'create-team' 
+                    ? 'bg-gradient-to-r from-blue-50 to-purple-50 text-blue-700 border-2 border-blue-200 shadow-md' 
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800 hover:shadow-sm'
+                }`}
+              >
+                <span className="text-lg lg:text-xl mr-3">🏢</span>
+                Create Team
+              </button>
+           </nav>
+           
+
+           
+           {/* Logout Section - sticky at bottom */}
+           <div className={`sticky bottom-0 bg-inherit mt-8 lg:mt-12 pt-6 lg:pt-8 border-t ${isDarkTheme ? 'border-gray-600' : 'border-gray-200'}`}>
+            <button
+              onClick={handleLogout}
+              className={`w-full px-4 lg:px-6 py-3 lg:py-4 rounded-xl transition-all duration-200 text-white font-semibold text-base lg:text-lg shadow-lg hover:shadow-xl ${
+                isDarkTheme
+                  ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700'
+                  : 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700'
+              }`}
+            >
+              <span className="text-lg lg:text-xl mr-3">🚪</span>
+              Logout Admin
+            </button>
           </div>
         </div>
       </div>
@@ -1212,63 +1239,59 @@ const AdminDashboard: React.FC = () => {
       )}
       
                                                                                                                {/* Main Content */}
-          <div className={`flex-1 p-4 lg:p-8 ml-0 lg:ml-72 ${isDarkTheme ? 'bg-gray-900' : 'bg-gray-50/30'}`}>
+          <div className={`flex-1 min-h-0 flex flex-col ml-0 lg:ml-72 ${isDarkTheme ? 'bg-gray-900' : 'bg-gray-50/30'}`}>
         {viewMode === 'overview' && (
-          <div className="space-y-6">
+          <div className="space-y-6 p-4 lg:p-6 overflow-auto">
                          {/* Header */}
-                           <div className={`${isDarkTheme ? 'bg-gradient-to-r from-purple-900 via-pink-800 to-purple-800' : 'bg-gradient-to-r from-blue-600 via-purple-600 to-blue-700'} rounded-2xl shadow-xl p-4 lg:p-8 text-white`}>
+                           <div className={`${isDarkTheme ? 'bg-gradient-to-r from-purple-900 via-pink-800 to-purple-800' : 'bg-gradient-to-r from-blue-600 via-purple-600 to-blue-700'} rounded-2xl shadow-xl p-3 lg:p-6 text-white`}>
                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
                  <div>
-                   <h1 className="text-2xl lg:text-4xl font-bold mb-2">👑 Admin Dashboard</h1>
-                   <p className="text-blue-100 text-base lg:text-xl">Manage your entire organization from one place</p>
+                   <h1 className="text-xl lg:text-2xl font-bold mb-2">👑 Admin Dashboard</h1>
+                   <p className="text-blue-100 text-sm lg:text-base">Manage your entire organization from one place</p>
                  </div>
-                                   <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-3 sm:space-y-0 sm:space-x-4">
-                    <button
-                      onClick={() => setIsDarkTheme(!isDarkTheme)}
-                      className="px-4 lg:px-6 py-2 lg:py-3 bg-white/20 hover:bg-white/30 rounded-xl transition-all duration-200 text-white font-medium shadow-lg hover:shadow-xl text-sm lg:text-base"
-                    >
-                      {isDarkTheme ? '🌞' : '🌙'}
-                    </button>
-                    
-
-                    
-                    <button
-                      onClick={loadAdminData}
-                      className="px-4 lg:px-6 py-2 lg:py-3 bg-white/20 hover:bg-white/30 rounded-xl transition-all duration-200 text-white font-medium shadow-lg hover:shadow-xl text-sm lg:text-base"
-                    >
-                      🔄 Refresh Data
-                    </button>
-                    
-                    {/* Admin Management Button - Only show for super admins and admins */}
-                    {(currentAdmin?.role === 'super_admin' ) && (
-                      <button
-                        onClick={() => setShowAdminManagement(true)}
-                        className="px-4 lg:px-6 py-2 lg:py-3 bg-orange-500 hover:bg-orange-600 rounded-xl transition-all duration-200 text-white font-medium shadow-lg hover:shadow-xl text-sm lg:text-base"
-                      >
-                        👥 Manage Admins
-                      </button>
-                    )}
-                    <div className="text-left sm:text-right">
-                      <p className="text-blue-200 text-sm lg:text-base">Welcome back,</p>
-                      <p className="text-lg lg:text-2xl font-semibold">
-                        {currentAdmin?.displayName || adminEmail || 'Administrator'}
-                      </p>
-                      {currentAdmin && (
-                        <div className="flex items-center space-x-2 mt-1">
-                          <span className={`px-2 py-1 text-xs rounded-full ${
-                            currentAdmin.role === 'super_admin' ? 'bg-red-500 text-white' :
-                            currentAdmin.role === 'admin' ? 'bg-blue-500 text-white' :
-                            'bg-green-500 text-white'
-                          }`}>
-                            {currentAdmin.role.replace('_', ' ').toUpperCase()}
-                          </span>
-                          <span className="text-blue-200 text-xs">
-                            {currentAdmin.email}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                 <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-3 sm:space-y-0 sm:space-x-4">
+                   <button
+                     onClick={() => setIsDarkTheme(!isDarkTheme)}
+                     className="px-3 lg:px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl transition-all duration-200 text-white font-medium shadow-lg hover:shadow-xl text-sm"
+                   >
+                     {isDarkTheme ? '🌞' : '🌙'}
+                   </button>
+                   <button
+                     onClick={loadAdminData}
+                     className="px-3 lg:px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl transition-all duration-200 text-white font-medium shadow-lg hover:shadow-xl text-sm"
+                   >
+                     🔄 Refresh Data
+                   </button>
+                   {/* Admin Management Button - Only show for super admins */}
+                   {(currentAdmin?.role === 'super_admin') && (
+                     <button
+                       onClick={() => setShowAdminManagement(true)}
+                       className="px-4 lg:px-6 py-2 lg:py-3 bg-orange-500 hover:bg-orange-600 rounded-xl transition-all duration-200 text-white font-medium shadow-lg hover:shadow-xl text-sm lg:text-base"
+                     >
+                       👥 Manage Admins
+                     </button>
+                   )}
+                   <div className="text-left sm:text-right">
+                     <p className="text-blue-200 text-sm lg:text-base">Welcome back,</p>
+                     <p className="text-lg lg:text-2xl font-semibold">
+                       {currentAdmin?.displayName || adminEmail || 'Administrator'}
+                     </p>
+                     {currentAdmin && (
+                       <div className="flex items-center space-x-2 mt-1">
+                         <span className={`px-2 py-1 text-xs rounded-full ${
+                           currentAdmin.role === 'super_admin' ? 'bg-red-500 text-white' :
+                           currentAdmin.role === 'admin' ? 'bg-blue-500 text-white' :
+                           'bg-green-500 text-white'
+                         }`}>
+                           {currentAdmin.role.replace('_', ' ').toUpperCase()}
+                         </span>
+                         <span className="text-blue-200 text-xs">
+                           {currentAdmin.email}
+                         </span>
+                       </div>
+                     )}
+                   </div>
+                 </div>
                </div>
              </div>
 
@@ -1449,6 +1472,21 @@ const AdminDashboard: React.FC = () => {
                   </button>
                </div>
              </div>
+          </div>
+        )}
+        {viewMode === 'organize' && (
+          <div className="space-y-6">
+            {/* Organize Panel */}
+            <div className={`${isDarkTheme ? 'bg-gray-800' : 'bg-white'} rounded-xl shadow-lg p-4 lg:p-6`}>
+              <h2 className={`text-xl lg:text-2xl font-bold ${isDarkTheme ? 'text-white' : 'text-gray-900'}`}>Organize</h2>
+              <div className="mt-4">
+                {/* eslint-disable-next-line @typescript-eslint/no-var-requires */}
+                {(() => {
+                  const OrganizePanel = require('./OrganizePanel').default;
+                  return <OrganizePanel />;
+                })()}
+              </div>
+            </div>
           </div>
         )}
 

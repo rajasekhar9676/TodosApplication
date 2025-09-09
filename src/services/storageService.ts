@@ -1,4 +1,5 @@
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { storage } from '../config';
 
 export interface UploadedFileInfo {
   name: string;
@@ -7,10 +8,14 @@ export interface UploadedFileInfo {
 
 export const storageService = {
   async uploadFile(file: File, pathPrefix: string): Promise<UploadedFileInfo> {
-    const storage = getStorage();
-    const fileName = `${pathPrefix}/${Date.now()}_${file.name}`;
+    const safeName = file.name.replace(/[^\w\.\-]+/g, '_');
+    const fileName = `${pathPrefix}/${Date.now()}_${safeName}`;
     const storageRef = ref(storage, fileName);
-    await uploadBytes(storageRef, file);
+    const metadata = { contentType: file.type || 'application/octet-stream' } as any;
+    const task = uploadBytesResumable(storageRef, file, metadata);
+    await new Promise<void>((resolve, reject) => {
+      task.on('state_changed', () => {}, reject, () => resolve());
+    });
     const url = await getDownloadURL(storageRef);
     return { name: file.name, url };
   }

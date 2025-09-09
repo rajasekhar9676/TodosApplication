@@ -1,10 +1,11 @@
 import { db } from '../config';
 import { addDoc, collection, doc, getDoc, getDocs, orderBy, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
+import { deleteDoc } from 'firebase/firestore';
 
 export type OrgCategory = 'magazine' | 'event' | 'project' | 'other';
 export type OrgStatus = 'planned' | 'in_progress' | 'completed' | 'blocked' | 'cancelled';
 export type OrgPriority = 'low' | 'medium' | 'high';
-export type OrgFileKind = 'tasks' | 'plans' | 'blueprints' | 'docs' | 'notes';
+export type OrgFileKind = 'tasks' | 'plans' | 'blueprints' | 'docs' | 'notes' | 'targets';
 
 export interface OrgFolder {
   id?: string;
@@ -86,6 +87,14 @@ export const companyOrgService = {
     return ref.id;
   },
 
+  async renameFolder(folderId: string, name: string) {
+    await updateDoc(doc(db, 'orgFolders', folderId), { name });
+  },
+
+  async renameFile(fileId: string, name: string) {
+    await updateDoc(doc(db, 'orgFiles', fileId), { name });
+  },
+
   async listFilesByFolder(folderId: string): Promise<OrgFile[]> {
     const qy = query(collection(db, 'orgFiles'), where('folderId', '==', folderId));
     const snap = await getDocs(qy);
@@ -122,6 +131,28 @@ export const companyOrgService = {
       const bt = (b.createdAt?.toMillis?.() || b.createdAt?.seconds * 1000 || 0);
       return bt - at;
     });
+  },
+
+  async deleteFileDeep(fileId: string) {
+    const tSnap = await getDocs(query(collection(db, 'orgTasks'), where('fileId', '==', fileId)));
+    await Promise.all(tSnap.docs.map(d => deleteDoc(d.ref)));
+    const pSnap = await getDocs(query(collection(db, 'orgPlans'), where('fileId', '==', fileId)));
+    await Promise.all(pSnap.docs.map(d => deleteDoc(d.ref)));
+    const bSnap = await getDocs(query(collection(db, 'orgBlueprintFiles'), where('fileId', '==', fileId)));
+    await Promise.all(bSnap.docs.map(d => deleteDoc(d.ref)));
+    await deleteDoc(doc(db, 'orgFiles', fileId));
+  },
+
+  async deleteFolderDeep(folderId: string) {
+    const files = await this.listFilesByFolder(folderId);
+    for (const f of files) {
+      if (f.id) await this.deleteFileDeep(f.id);
+    }
+    const pSnap = await getDocs(query(collection(db, 'orgPlans'), where('folderId', '==', folderId)));
+    await Promise.all(pSnap.docs.map(d => deleteDoc(d.ref)));
+    const bSnap = await getDocs(query(collection(db, 'orgBlueprintFiles'), where('folderId', '==', folderId)));
+    await Promise.all(bSnap.docs.map(d => deleteDoc(d.ref)));
+    await deleteDoc(doc(db, 'orgFolders', folderId));
   },
 
   // Blueprints

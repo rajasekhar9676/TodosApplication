@@ -8,6 +8,8 @@ import PlanDetails from './PlanDetails';
 import BlueprintDetails from './BlueprintDetails';
 import PlanTable from './PlanTable';
 import BlueprintTable from './BlueprintTable';
+import TargetForm from './forms/TargetForm';
+import TargetTable from './TargetTable';
 import { useNavigate } from 'react-router-dom';
 
 const categories: OrgCategory[] = ['magazine','event','project','other'];
@@ -25,6 +27,12 @@ const OrganizePanel: React.FC = () => {
 
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
   const [showNewFileModal, setShowNewFileModal] = useState(false);
+  const [showRenameModal, setShowRenameModal] = useState<{
+    kind: 'folder'|'file'|''; id: string; name: string;
+  }>({ kind: '', id: '', name: '' });
+  const [confirmDelete, setConfirmDelete] = useState<{
+    kind: 'folder'|'file'|''; id: string; name: string;
+  }>({ kind: '', id: '', name: '' });
   const [newFolderName, setNewFolderName] = useState('');
   const [newFileName, setNewFileName] = useState('');
 
@@ -335,6 +343,8 @@ const OrganizePanel: React.FC = () => {
           <p className="text-gray-500">Choose a section to manage. Click a section to open it.</p>
         </div>
         <div className="flex items-center space-x-2">
+          <button className="px-3 py-2 border rounded-lg" onClick={() => setShowRenameModal({ kind: 'folder', id: selectedFolderId, name: folders.find(f=>f.id===selectedFolderId)?.name || '' })}>Rename Folder</button>
+          <button className="px-3 py-2 border rounded-lg text-red-600" onClick={() => setConfirmDelete({ kind: 'folder', id: selectedFolderId, name: folders.find(f=>f.id===selectedFolderId)?.name || '' })}>Delete Folder</button>
           <button className="px-3 py-2 bg-indigo-600 text-white rounded-lg" onClick={() => setShowNewFileModal(true)}>New File</button>
         </div>
       </div>
@@ -345,7 +355,8 @@ const OrganizePanel: React.FC = () => {
           {label:'Plans', desc:'High-level planning docs', kind:'plans'},
           {label:'Blueprints', desc:'Reusable workflow templates', kind:'blueprints'},
           {label:'Docs', desc:'Specifications, briefs, SOPs', kind:'docs'},
-          {label:'Notes', desc:'Meeting notes, ideas', kind:'notes'}
+          {label:'Notes', desc:'Meeting notes, ideas', kind:'notes'},
+          {label:'Targets', desc:'Goals and KPIs tracking', kind:'targets'}
         ].map(card => (
           <div
             key={card.label}
@@ -375,9 +386,24 @@ const OrganizePanel: React.FC = () => {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-h-[calc(100vh-110px)] overflow-y-auto">
       <div className="flex items-center justify-between">
-        <button className="px-3 py-2 border rounded-lg" onClick={() => navigate('/admin_dashboard')}>Back</button>
+        <button
+          className="px-3 py-2 border rounded-lg"
+          onClick={() => {
+            if (selectedFolderId || selectedFileId) {
+              setSelectedFileId('');
+              setSelectedFolderId('');
+              setShowTaskForm(false);
+              setShowPlanForm(false);
+              setShowBlueprintForm(false);
+            } else {
+              navigate('/admin_dashboard');
+            }
+          }}
+        >
+          Back
+        </button>
         <div />
       </div>
       {/* Render: no folder → overview; folder no file → folderHub; folder+file → section content */}
@@ -392,6 +418,8 @@ const OrganizePanel: React.FC = () => {
             <div className="text-xl font-bold">{folders.find(f => f.id===selectedFolderId)?.name} / {(filesByFolder[selectedFolderId]||[]).find(f=>f.id===selectedFileId)?.name}</div>
             <div className="flex items-center space-x-2">
               <button className="px-3 py-2 border rounded-lg" onClick={() => setSelectedFileId('')}>Back to Folder</button>
+              <button className="px-3 py-2 border rounded-lg" onClick={() => setShowRenameModal({ kind: 'file', id: selectedFileId, name: (filesByFolder[selectedFolderId]||[]).find(f=>f.id===selectedFileId)?.name || '' })}>Rename File</button>
+              <button className="px-3 py-2 border rounded-lg text-red-600" onClick={() => setConfirmDelete({ kind: 'file', id: selectedFileId, name: (filesByFolder[selectedFolderId]||[]).find(f=>f.id===selectedFileId)?.name || '' })}>Delete File</button>
               <button className="px-3 py-2 bg-indigo-600 text-white rounded-lg" onClick={() => selectedFolderId && setShowNewFileModal(true)} disabled={!selectedFolderId}>New File</button>
             </div>
           </div>
@@ -432,7 +460,11 @@ const OrganizePanel: React.FC = () => {
                       <button className="px-2 py-1 border rounded" onClick={exportTasksExcel}>Excel</button>
                       <button className="px-2 py-1 border rounded" onClick={exportTasksPDF}>PDF</button>
                       <button className="px-2 py-1 border rounded" onClick={exportTasksWord}>Word</button>
-                      <button className="px-3 py-2 bg-blue-600 text-white rounded-lg" onClick={() => setShowTaskForm(true)}>Create Task</button>
+                      {!showTaskForm ? (
+                        <button className="px-3 py-2 bg-blue-600 text-white rounded-lg" onClick={() => setShowTaskForm(true)}>Create Task</button>
+                      ) : (
+                        <button className="px-3 py-2 bg-gray-200 text-gray-800 rounded-lg" onClick={() => setShowTaskForm(false)}>Cancel</button>
+                      )}
                     </div>
                   </div>
                   {showTaskForm && (
@@ -446,6 +478,7 @@ const OrganizePanel: React.FC = () => {
                       />
                     </div>
                   )}
+                  {!showTaskForm && (
                   <div className="bg-white border rounded-xl overflow-x-hidden">
                     {/* Ensure a cohesive, wrapped table */}
                     {loading ? <div className="p-4">Loading...</div> : (
@@ -472,7 +505,7 @@ const OrganizePanel: React.FC = () => {
                                 <td className="px-3 py-2 truncate">{t.priority}</td>
                                 <td className="px-3 py-2 whitespace-pre-wrap">{t.notes || ''}</td>
                                 <td className="px-3 py-2">
-                                  <button className="px-2 py-1 bg-green-600 text-white rounded" onClick={() => handleUpdateTask(t.id!, { status: 'completed' as any })}>Complete</button>
+                                  <span className="inline-block px-2 py-1 text-xs rounded bg-gray-100 capitalize">{t.status}</span>
                                 </td>
                               </tr>
                             ))}
@@ -484,6 +517,7 @@ const OrganizePanel: React.FC = () => {
                       </div>
                     )}
                   </div>
+                  )}
                 </div>
               );
             }
@@ -493,7 +527,11 @@ const OrganizePanel: React.FC = () => {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <div className="text-lg font-semibold">Plans</div>
-                    <button className="px-3 py-2 bg-blue-600 text-white rounded-lg" onClick={() => setShowPlanForm(true)}>Create Plan</button>
+                    {!showPlanForm ? (
+                      <button className="px-3 py-2 bg-blue-600 text-white rounded-lg" onClick={() => setShowPlanForm(true)}>Create Plan</button>
+                    ) : (
+                      <button className="px-3 py-2 bg-gray-200 text-gray-800 rounded-lg" onClick={() => setShowPlanForm(false)}>Cancel</button>
+                    )}
                   </div>
                   {showPlanForm && (
                     <div className="p-4 bg-white rounded-xl border">
@@ -506,9 +544,11 @@ const OrganizePanel: React.FC = () => {
                       />
                     </div>
                   )}
-                  <div className="bg-white border rounded-xl">
-                    <PlanTable folderId={selectedFolderId} refreshToken={planRefresh} />
-                  </div>
+                  {!showPlanForm && (
+                    <div className="bg-white border rounded-xl">
+                      <PlanTable folderId={selectedFolderId} refreshToken={planRefresh} />
+                    </div>
+                  )}
                 </div>
               );
             }
@@ -518,7 +558,87 @@ const OrganizePanel: React.FC = () => {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <div className="text-lg font-semibold">Blueprints</div>
-                    <button className="px-3 py-2 bg-blue-600 text-white rounded-lg" onClick={() => setShowBlueprintForm(true)}>Create Blueprint</button>
+                    <div className="flex items-center space-x-2">
+                      {!showBlueprintForm && (
+                        <>
+                          <button
+                            className="px-2 py-1 border rounded"
+                            onClick={async () => {
+                              const list = await companyOrgService.listBlueprints();
+                              const rows = (list || []).filter((b:any)=>!selectedFolderId || b.folderId===selectedFolderId);
+                              const header = ['Name','Category','Version','Created By','Created Date','Last Updated','Description','Default Tasks'];
+                              const csv = [header.join(',')].concat(rows.map((b:any)=>[
+                                b.name||'', b.category||'', b.version||'', b.created_by||b.createdBy||'', b.created_date||b.createdDate||'', b.last_updated||b.lastUpdated||'',
+                                (b.description||'').replace(/\n/g,' '), Array.isArray(b.default_tasks||b.defaultTasks)?(b.default_tasks||b.defaultTasks).join('|'):''
+                              ].map(v=>`"${String(v).replace(/"/g,'""')}"`).join(','))).join('\n');
+                              const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                              const url = URL.createObjectURL(blob);
+                              const a = document.createElement('a'); a.href=url; a.download='blueprints.csv'; a.click(); URL.revokeObjectURL(url);
+                            }}
+                          >CSV</button>
+                          <button
+                            className="px-2 py-1 border rounded"
+                            onClick={async () => {
+                              const list = await companyOrgService.listBlueprints();
+                              const rows = (list || []).filter((b:any)=>!selectedFolderId || b.folderId===selectedFolderId);
+                              const makeTable = () => {
+                                const cells = (s:string)=>`<td style="border:1px solid #ddd;padding:6px;vertical-align:top;">${s}</td>`;
+                                const head = ['Name','Category','Version','Created By','Created Date','Last Updated','Description','Default Tasks']
+                                  .map(h=>`<th style="border:1px solid #ddd;padding:6px;text-align:left;background:#f5f5f5;">${h}</th>`).join('');
+                                const body = rows.map((b:any)=>`<tr>
+                                  ${cells(b.name||'')}${cells(b.category||'')}${cells(b.version||'')}${cells(b.created_by||b.createdBy||'')}
+                                  ${cells(b.created_date||b.createdDate||'')}${cells(b.last_updated||b.lastUpdated||'')}
+                                  ${cells((b.description||'').replace(/\n/g,'<br/>'))}
+                                  ${cells(Array.isArray(b.default_tasks||b.defaultTasks)?(b.default_tasks||b.defaultTasks).join(', '):'')}
+                                </tr>`).join('');
+                                return `<table style="border-collapse:collapse;width:100%;">`+
+                                  `<thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+                              };
+                              const html = `<!doctype html><html><head><meta charset="utf-8" /></head><body>${makeTable()}</body></html>`;
+                              const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
+                              const url = URL.createObjectURL(blob);
+                              const a = document.createElement('a'); a.href=url; a.download='blueprints.xls'; a.click(); URL.revokeObjectURL(url);
+                            }}
+                          >Excel</button>
+                          <button
+                            className="px-2 py-1 border rounded"
+                            onClick={async () => {
+                              const list = await companyOrgService.listBlueprints();
+                              const rows = (list || []).filter((b:any)=>!selectedFolderId || b.folderId===selectedFolderId);
+                              const head = ['Name','Category','Version','Created By','Created Date','Last Updated','Description','Default Tasks'];
+                              const tableRows = rows.map((b:any)=>`
+                                <tr>
+                                  <td>${b.name||''}</td><td>${b.category||''}</td><td>${b.version||''}</td><td>${b.created_by||b.createdBy||''}</td>
+                                  <td>${b.created_date||b.createdDate||''}</td><td>${b.last_updated||b.lastUpdated||''}</td>
+                                  <td>${(b.description||'').replace(/\n/g,'<br/>')}</td>
+                                  <td>${Array.isArray(b.default_tasks||b.defaultTasks)?(b.default_tasks||b.defaultTasks).join(', '):''}</td>
+                                </tr>`).join('');
+                              const html = `<!doctype html><html><head><meta charset="utf-8" />
+                                <style>table{border-collapse:collapse;width:100%;}td,th{border:1px solid #ddd;padding:6px;text-align:left;}thead{background:#f5f5f5;}</style>
+                                </head><body><table><thead><tr>${head.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${tableRows}</tbody></table></body></html>`;
+                              const win = window.open('', '_blank'); if (win) { win.document.write(html); win.document.close(); }
+                            }}
+                          >PDF</button>
+                          <button
+                            className="px-2 py-1 border rounded"
+                            onClick={async () => {
+                              const list = await companyOrgService.listBlueprints();
+                              const rows = (list || []).filter((b:any)=>!selectedFolderId || b.folderId===selectedFolderId);
+                              const table = rows.map((b:any)=>`<p><b>${b.name||''}</b> (${b.category||''}) v${b.version||''}<br/>By ${b.created_by||b.createdBy||''} | ${b.created_date||b.createdDate||''}<br/>Updated ${b.last_updated||b.lastUpdated||''}<br/>${(b.description||'').replace(/\n/g,'<br/>')}<br/>Tasks: ${Array.isArray(b.default_tasks||b.defaultTasks)?(b.default_tasks||b.defaultTasks).join(', '):''}</p>`).join('<hr/>');
+                              const html = `<!doctype html><html><head><meta charset="utf-8" /></head><body>${table}</body></html>`;
+                              const blob = new Blob([html], { type: 'application/msword' });
+                              const url = URL.createObjectURL(blob);
+                              const a = document.createElement('a'); a.href=url; a.download='blueprints.doc'; a.click(); URL.revokeObjectURL(url);
+                            }}
+                          >Word</button>
+                        </>
+                      )}
+                      {!showBlueprintForm ? (
+                        <button className="px-3 py-2 bg-blue-600 text-white rounded-lg" onClick={() => setShowBlueprintForm(true)}>Create Blueprint</button>
+                      ) : (
+                        <button className="px-3 py-2 bg-gray-200 text-gray-800 rounded-lg" onClick={() => setShowBlueprintForm(false)}>Cancel</button>
+                      )}
+                    </div>
                   </div>
                   {showBlueprintForm && (
                     <div className="p-4 bg-white rounded-xl border">
@@ -531,9 +651,41 @@ const OrganizePanel: React.FC = () => {
                       />
                     </div>
                   )}
-                  <div className="bg-white border rounded-xl">
-                    <BlueprintTable folderId={selectedFolderId} refreshToken={blueprintRefresh} />
+                  {!showBlueprintForm && (
+                    <div className="bg-white border rounded-xl">
+                      <BlueprintTable folderId={selectedFolderId} refreshToken={blueprintRefresh} />
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            if (kind === 'targets') {
+              return (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="text-lg font-semibold">Targets</div>
+                    {!showTaskForm ? (
+                      <button className="px-3 py-2 bg-blue-600 text-white rounded-lg" onClick={() => setShowTaskForm(true)}>Create Target</button>
+                    ) : (
+                      <button className="px-3 py-2 bg-gray-200 text-gray-800 rounded-lg" onClick={() => setShowTaskForm(false)}>Cancel</button>
+                    )}
                   </div>
+                  {showTaskForm && (
+                    <div className="p-4 bg-white rounded-xl border">
+                      <TargetForm
+                        folderId={selectedFolderId}
+                        fileId={selectedFileId}
+                        onSaved={() => { showToast('Target created successfully'); setShowTaskForm(false); }}
+                        onToast={(m)=>showToast(m)}
+                      />
+                    </div>
+                  )}
+                  {!showTaskForm && (
+                    <div className="bg-white border rounded-xl">
+                      <TargetTable folderId={selectedFolderId} />
+                    </div>
+                  )}
                 </div>
               );
             }
@@ -585,6 +737,38 @@ const OrganizePanel: React.FC = () => {
                 setShowNewFileModal(false);
                 setNewFileName('');
               }} className="px-4 py-2 rounded-lg bg-indigo-600 text-white">Create</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showRenameModal.kind && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white w-full max-w-md rounded-xl shadow-xl p-6">
+            <h3 className="text-lg font-semibold mb-4">Rename {showRenameModal.kind === 'folder' ? 'Folder' : 'File'}</h3>
+            <input className="w-full px-3 py-2 border rounded-lg mb-4" value={showRenameModal.name} onChange={e=>setShowRenameModal(prev=>({...prev, name:e.target.value}))} />
+            <div className="flex justify-end space-x-2">
+              <button className="px-4 py-2 rounded-lg" onClick={()=>setShowRenameModal({kind:'', id:'', name:''})}>Cancel</button>
+              <button className="px-4 py-2 rounded-lg bg-blue-600 text-white" onClick={async ()=>{
+                if (showRenameModal.kind==='folder') { await companyOrgService.renameFolder(showRenameModal.id, showRenameModal.name); await refreshFolders(); }
+                if (showRenameModal.kind==='file') { await companyOrgService.renameFile(showRenameModal.id, showRenameModal.name); await refreshFolders(); }
+                setShowRenameModal({kind:'', id:'', name:''});
+              }}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {confirmDelete.kind && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white w-full max-w-md rounded-xl shadow-xl p-6">
+            <h3 className="text-lg font-semibold mb-4">Delete {confirmDelete.kind === 'folder' ? 'Folder' : 'File'}</h3>
+            <p className="mb-4">Are you sure you want to delete "{confirmDelete.name}"? This will remove all of its contents.</p>
+            <div className="flex justify-end space-x-2">
+              <button className="px-4 py-2 rounded-lg" onClick={()=>setConfirmDelete({kind:'', id:'', name:''})}>Cancel</button>
+              <button className="px-4 py-2 rounded-lg bg-red-600 text-white" onClick={async ()=>{
+                if (confirmDelete.kind==='folder') { await companyOrgService.deleteFolderDeep(confirmDelete.id); setSelectedFolderId(''); setSelectedFileId(''); await refreshFolders(); }
+                if (confirmDelete.kind==='file') { await companyOrgService.deleteFileDeep(confirmDelete.id); setSelectedFileId(''); await refreshFolders(); }
+                setConfirmDelete({kind:'', id:'', name:''});
+              }}>Delete</button>
             </div>
           </div>
         </div>

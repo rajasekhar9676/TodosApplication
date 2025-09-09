@@ -1,7 +1,7 @@
 import { db } from '../config';
 import { addDoc, collection, doc, getDoc, getDocs, orderBy, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 
-export type ContentKind = 'plans' | 'docs' | 'notes';
+export type ContentKind = 'plans' | 'docs' | 'notes' | 'targets';
 export type ContentStatus = 'draft' | 'in_review' | 'approved' | 'archived';
 
 export interface OrgContent {
@@ -44,23 +44,25 @@ export const companyOrgContentService = {
   },
 
   async createContent(payload: Omit<OrgContent, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
+    const cleaned: any = Object.fromEntries(Object.entries(payload).filter(([, v]) => v !== undefined));
     const ref = await addDoc(collection(db, 'orgContents'), {
-      ...payload,
+      ...cleaned,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
     await addDoc(collection(db, 'orgContentVersions'), {
-      fileId: payload.fileId,
+      fileId: cleaned.fileId,
       contentId: ref.id,
       version: 1,
-      snapshot: JSON.stringify(payload),
+      snapshot: JSON.stringify(cleaned),
       createdAt: serverTimestamp()
     });
     return ref.id;
   },
 
   async updateContent(contentId: string, partial: Partial<OrgContent>): Promise<void> {
-    await updateDoc(doc(db, 'orgContents', contentId), { ...partial, updatedAt: serverTimestamp() });
+    const cleaned: any = Object.fromEntries(Object.entries(partial).filter(([, v]) => v !== undefined));
+    await updateDoc(doc(db, 'orgContents', contentId), { ...cleaned, updatedAt: serverTimestamp() });
     const contentDoc = await getDoc(doc(db, 'orgContents', contentId));
     if (contentDoc.exists()) {
       const data = contentDoc.data() as OrgContent;
@@ -71,7 +73,7 @@ export const companyOrgContentService = {
         fileId: data.fileId,
         contentId,
         version: next,
-        snapshot: JSON.stringify({ ...data, ...partial }),
+        snapshot: JSON.stringify({ ...data, ...cleaned }),
         createdAt: serverTimestamp()
       });
     }

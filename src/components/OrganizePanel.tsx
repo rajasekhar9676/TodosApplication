@@ -1261,7 +1261,7 @@ ${html}
                   <div className="flex items-center justify-between">
                     <div className="text-lg font-semibold">Plans</div>
                     <div className="flex items-center space-x-2">
-                      <button className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700" onClick={() => setShowPlanForm(true)}>Create Plan</button>
+                      {/* <button className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700" onClick={() => setShowPlanForm(true)}>Create Plan</button> */}
                       <div className="relative" data-plans-share-dropdown>
                         <button
                           className="px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 flex items-center space-x-2"
@@ -1511,7 +1511,7 @@ ${html}
                   <div className="flex items-center justify-between">
                     <div className="text-lg font-semibold">Blueprints</div>
                     <div className="flex items-center space-x-2">
-                      <button className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700" onClick={() => setShowBlueprintForm(true)}>Create Blueprint</button>
+                      {/* <button className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700" onClick={() => setShowBlueprintForm(true)}>Create Blueprint</button> */}
                       <div className="relative" data-blueprints-share-dropdown>
                         <button
                           className="px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 flex items-center space-x-2"

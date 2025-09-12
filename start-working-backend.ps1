@@ -46,3 +46,6 @@ Write-Host "   Speech-to-text and text-to-speech should work!" -ForegroundColor 
 
 
 
+
+
+

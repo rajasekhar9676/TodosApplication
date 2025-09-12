@@ -18,6 +18,13 @@ export interface OrgTarget {
   progress?: number; // percentage or amount achieved
   status?: TargetStatus;
   notes?: string;
+  attachments?: Array<{
+    id: string;
+    name: string;
+    url: string;
+    mime_type?: string;
+    size_bytes?: number;
+  }>;
   createdAt?: any;
   updatedAt?: any;
 }
@@ -50,5 +57,7 @@ export const companyTargetsService = {
     return snap.docs.map(d => ({ docId: d.id, ...(d.data() as any) }));
   }
 };
+
+
 
 

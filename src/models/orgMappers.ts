@@ -85,6 +85,7 @@ export const planToDoc = (p: Plan) => ({
   tasks: p.tasks || [],
   progress: typeof p.progress === 'number' ? p.progress : null,
   notes: p.notes || '',
+  attachments: Array.isArray(p.attachments) ? p.attachments : [],
   createdAt: new Date(),
 });
 
@@ -99,6 +100,7 @@ export const docToPlan = (id: string, d: any): Plan => ({
   tasks: Array.isArray(d.tasks) ? d.tasks : [],
   progress: typeof d.progress === 'number' ? d.progress : undefined,
   notes: d.notes || undefined,
+  attachments: Array.isArray(d.attachments) ? d.attachments : [],
 });
 
 export const blueprintToDoc = (b: Blueprint) => ({
@@ -111,6 +113,7 @@ export const blueprintToDoc = (b: Blueprint) => ({
   created_date: b.created_date,
   last_updated: b.last_updated || null,
   version: b.version,
+  attachments: Array.isArray(b.attachments) ? b.attachments : [],
   createdAt: new Date(),
 });
 
@@ -124,6 +127,7 @@ export const docToBlueprint = (id: string, d: any): Blueprint => ({
   created_date: d.created_date,
   last_updated: d.last_updated || undefined,
   version: d.version,
+  attachments: Array.isArray(d.attachments) ? d.attachments : [],
 });
 
 export const targetToDoc = (t: Target) => ({
@@ -138,6 +142,7 @@ export const targetToDoc = (t: Target) => ({
   status: t.status,
   linked_plans: t.linked_plans || [],
   metrics: t.metrics || [],
+  attachments: Array.isArray(t.attachments) ? t.attachments : [],
   createdAt: new Date(),
 });
 
@@ -153,7 +158,10 @@ export const docToTarget = (id: string, d: any): Target => ({
   status: d.status,
   linked_plans: Array.isArray(d.linked_plans) ? d.linked_plans : [],
   metrics: Array.isArray(d.metrics) ? d.metrics : [],
+  attachments: Array.isArray(d.attachments) ? d.attachments : [],
 });
+
+
 
 
 

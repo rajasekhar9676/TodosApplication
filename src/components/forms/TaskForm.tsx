@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { Task, TaskPriority, TaskStatus } from '../../models/orgModels';
 import { validateTask } from '../../models/orgMappers';
 import { companyOrgService } from '../../services/companyOrgService';
-import { storageService } from '../../services/storageService';
+import { fileStorageService, FileInfo } from '../../services/fileStorageService';
+import DocumentViewer from '../DocumentViewer';
+import BulkUpload from '../BulkUpload';
 
 interface Props {
   folderId: string;
@@ -32,28 +34,45 @@ const TaskForm: React.FC<Props> = ({ folderId, fileId, onCreated, onError, onDow
   });
   const [depsText, setDepsText] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [viewingDocument, setViewingDocument] = useState<{url: string, name: string} | null>(null);
+  const [attachedFiles, setAttachedFiles] = useState<FileInfo[]>([]);
+  const [showBulkUpload, setShowBulkUpload] = useState(false);
 
   const update = (k: keyof Task, v: any) => setForm(prev => ({ ...prev, [k]: v }));
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSingleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
+    
+    const file = e.target.files[0];
+    
     try {
       setUploading(true);
-      const file = e.target.files[0];
-      const info = await storageService.uploadFile(file, `org/${folderId}/${fileId}/attachments`);
-      setForm(prev => ({
-        ...prev,
-        attachments: [
-          ...(prev.attachments || []),
-          { id: `${Date.now()}`, name: info.name, url: info.url }
-        ]
-      }));
+      console.log('📁 Starting file upload...');
+      
+      const fileInfo = await fileStorageService.uploadFile(
+        file, 
+        `org/${folderId}/${fileId}/attachments`,
+        (progress) => {
+          console.log(`Upload progress: ${progress.percentage}%`);
+        }
+      );
+      
+      setAttachedFiles(prev => [...prev, fileInfo]);
+      console.log('✅ File uploaded successfully:', fileInfo.url);
+      
     } catch (err) {
-      onError && onError('Upload failed');
+      console.error('❌ Upload error:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Upload failed. Please try again.';
+      onError && onError(errorMessage);
     } finally {
       setUploading(false);
       e.target.value = '';
     }
+  };
+
+  const handleBulkUpload = (files: FileInfo[]) => {
+    setAttachedFiles(prev => [...prev, ...files]);
+    setShowBulkUpload(false);
   };
 
   const handleSubmit = async () => {
@@ -74,7 +93,16 @@ const TaskForm: React.FC<Props> = ({ folderId, fileId, onCreated, onError, onDow
         dueDate: toValidate.due_date || undefined,
         startDate: toValidate.start_date || undefined,
         completionDate: toValidate.completion_date || undefined,
-        attachments: (toValidate.attachments as any) || [],
+        attachments: [
+          ...(toValidate.attachments as any) || [],
+          ...attachedFiles.map(file => ({
+            id: file.id,
+            name: file.name,
+            url: file.url,
+            mime_type: file.type,
+            size_bytes: file.size
+          }))
+        ],
         dependencies,
         notes: toValidate.description || ''
       });
@@ -107,21 +135,97 @@ const TaskForm: React.FC<Props> = ({ folderId, fileId, onCreated, onError, onDow
       </div>
       <textarea className="w-full px-3 py-2 border rounded-lg" placeholder="Description" value={form.description || ''} onChange={e => update('description', e.target.value)} />
       <input className="w-full px-3 py-2 border rounded-lg" placeholder="Dependencies (comma separated task_ids)" value={depsText} onChange={e => setDepsText(e.target.value)} />
-      <div className="flex items-center justify-between">
-        <label className="px-3 py-2 border rounded-lg cursor-pointer">
-          {uploading ? 'Uploading...' : 'Upload Attachment'}
-          <input type="file" className="hidden" onChange={handleUpload} />
-        </label>
-        <button className="px-3 py-2 border rounded-lg" onClick={onDownload}>Download</button>
-      </div>
-      <div className="space-y-1">
-        {(form.attachments || []).map(att => (
-          <a key={att.id} className="block text-sm text-blue-600" href={att.url} target="_blank" rel="noreferrer">📎 {att.name}</a>
-        ))}
+      <div className="space-y-4">
+        {/* Upload Options */}
+        <div className="flex items-center justify-between">
+          <div className="flex space-x-2">
+            <label className="px-3 py-2 border rounded-lg cursor-pointer">
+              {uploading ? 'Uploading...' : 'Single Upload'}
+              <input type="file" className="hidden" onChange={handleSingleUpload} />
+            </label>
+            <button
+              onClick={() => setShowBulkUpload(!showBulkUpload)}
+              className="px-3 py-2 border rounded-lg hover:bg-gray-50"
+            >
+              {showBulkUpload ? 'Hide Bulk Upload' : 'Bulk Upload'}
+            </button>
+          </div>
+          <button className="px-3 py-2 border rounded-lg" onClick={onDownload}>Download All</button>
+        </div>
+
+        {/* Bulk Upload Component */}
+        {showBulkUpload && (
+          <BulkUpload
+            pathPrefix={`org/${folderId}/${fileId}/attachments`}
+            onFilesUploaded={handleBulkUpload}
+            onError={onError}
+            maxFiles={20}
+            maxFileSize={100}
+          />
+        )}
+
+        {/* Attached Files */}
+        <div className="space-y-2">
+          <h4 className="font-medium text-gray-700">Attached Files ({attachedFiles.length})</h4>
+          {attachedFiles.map(file => (
+            <div key={file.id} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+              <div className="flex items-center space-x-3">
+                <div className="text-2xl">
+                  {file.type.startsWith('image/') ? '🖼️' : 
+                   file.type === 'application/pdf' ? '📄' :
+                   file.type.startsWith('text/') ? '📝' : '📎'}
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-700">{file.name}</p>
+                  <p className="text-xs text-gray-500">
+                    {(file.size / 1024 / 1024).toFixed(2)} MB • {new Date(file.uploadedAt).toLocaleDateString()}
+                  </p>
+                </div>
+              </div>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => setViewingDocument({url: file.url, name: file.name})}
+                  className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                >
+                  View
+                </button>
+                <a
+                  href={file.url}
+                  download={file.name}
+                  className="px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700"
+                >
+                  Download
+                </a>
+                <button
+                  onClick={async () => {
+                    try {
+                      await fileStorageService.deleteFile(file);
+                      setAttachedFiles(prev => prev.filter(f => f.id !== file.id));
+                    } catch (error) {
+                      onError && onError('Failed to delete file');
+                    }
+                  }}
+                  className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
       <div className="flex items-center justify-end">
         <button className="px-3 py-2 bg-blue-600 text-white rounded-lg" onClick={handleSubmit}>Create Task</button>
       </div>
+      
+      {/* Document Viewer Modal */}
+      {viewingDocument && (
+        <DocumentViewer
+          documentUrl={viewingDocument.url}
+          fileName={viewingDocument.name}
+          onClose={() => setViewingDocument(null)}
+        />
+      )}
     </div>
   );
 };

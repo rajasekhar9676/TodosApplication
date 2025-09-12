@@ -45,6 +45,13 @@ export interface Plan {
   tasks: string[];              // task_id[]
   progress?: number;            // 0..100
   notes?: string;
+  attachments?: Array<{
+    id: string;
+    name: string;
+    url: string;
+    mime_type?: string;
+    size_bytes?: number;
+  }>;
 }
 
 // 3) Blueprints
@@ -62,6 +69,13 @@ export interface Blueprint {
   created_date: string;         // ISO datetime
   last_updated?: string;        // ISO datetime
   version: string;
+  attachments?: Array<{
+    id: string;
+    name: string;
+    url: string;
+    mime_type?: string;
+    size_bytes?: number;
+  }>;
 }
 
 // 4) Targets
@@ -83,7 +97,16 @@ export interface Target {
     unit?: string;             // 'USD', '%', 'count'
     last_updated?: string;     // ISO datetime
   }>;
+  attachments?: Array<{
+    id: string;
+    name: string;
+    url: string;
+    mime_type?: string;
+    size_bytes?: number;
+  }>;
 }
+
+
 
 
 
